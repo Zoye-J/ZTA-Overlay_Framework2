@@ -1,0 +1,44 @@
+services:
+  # Gateway service
+  - name: "gateway"
+    description: "Entry point for authenticated users"
+    host_service: true
+    dial_service: false
+    bind_port: 5000
+    localhost_only: true
+    policy:
+      require_mfa: true
+      allowed_clearance: "BASIC"
+      
+  # API Server
+  - name: "api_server"
+    description: "Business logic and database operations"
+    host_service: true
+    dial_service: true
+    bind_port: 5001
+    localhost_only: true
+    policy:
+      require_mfa: false
+      allowed_clearance: "CONFIDENTIAL"
+      
+  # OPA Agent  
+  - name: "opa_agent"
+    description: "Policy enforcement and encryption"
+    host_service: true
+    dial_service: true
+    bind_port: 8282
+    localhost_only: true
+    policy:
+      require_mfa: false
+      allowed_clearance: "SECRET"
+      
+  # Dashboard
+  - name: "dashboard"
+    description: "Real-time monitoring dashboard"
+    host_service: true
+    dial_service: false
+    bind_port: 5002
+    localhost_only: true
+    policy:
+      require_mfa: true
+      allowed_clearance: "TOP_SECRET"

@@ -1,0 +1,63 @@
+policies:
+  # Service-to-service policies (who can dial what)
+  - policy_id: "pol-001"
+    name: "gateway_can_dial_api"
+    action: "dial"
+    source_identity: "gateway"
+    target_service: "api_server"
+    conditions:
+      time_restricted: false
+      
+  - policy_id: "pol-002"
+    name: "gateway_can_dial_opa"
+    action: "dial"
+    source_identity: "gateway"
+    target_service: "opa_agent"
+    conditions:
+      time_restricted: false
+      
+  - policy_id: "pol-003"
+    name: "api_can_dial_opa"
+    action: "dial"
+    source_identity: "api_server"
+    target_service: "opa_agent"
+    conditions:
+      time_restricted: false
+      
+  # User access policies
+  - policy_id: "pol-100"
+    name: "clearance_basic"
+    action: "user_access"
+    allowed_clearance: ["BASIC"]
+    allowed_departments: ["General"]
+    time_restrictions:
+      enabled: false
+      
+  - policy_id: "pol-101"
+    name: "clearance_confidential"
+    action: "user_access"
+    allowed_clearance: ["CONFIDENTIAL"]
+    allowed_departments: ["Defense", "Intelligence", "Home"]
+    time_restrictions:
+      enabled: false
+      
+  - policy_id: "pol-102"
+    name: "clearance_secret"
+    action: "user_access"
+    allowed_clearance: ["SECRET"]
+    allowed_departments: ["Defense", "Intelligence"]
+    time_restrictions:
+      enabled: false
+      
+  - policy_id: "pol-103"
+    name: "clearance_top_secret"
+    action: "user_access"
+    allowed_clearance: ["TOP_SECRET"]
+    allowed_departments: ["Intelligence"]
+    time_restrictions:
+      enabled: true
+      allowed_hours:
+        start: 8  # Business hours only
+        end: 16
+      timezone: "Asia/Dhaka"
+      allowed_days: ["monday", "tuesday", "wednesday", "thursday"]

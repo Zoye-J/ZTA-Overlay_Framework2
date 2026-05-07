@@ -1,0 +1,18 @@
+service:
+  name: "gateway"
+  port: 5000
+  bind_host: "127.0.0.1"  # LOCALHOST ONLY - critical for ZTA overlay
+  
+local:
+  edge_router_proxy_host: "127.0.0.1"
+  edge_router_proxy_port: 9999  # Port where Edge Router is listening
+  
+# Database (no hardcodes)
+database:
+  type: "sqlite"
+  path: "../../database/gateway.db"
+  
+# JWT settings  
+jwt:
+  expiry_hours: 8
+  algorithm: "RS256"

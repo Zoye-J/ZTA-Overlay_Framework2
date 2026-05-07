@@ -1,0 +1,30 @@
+overlay_network:
+  name: "ZTA-Overlay-Bangladesh"
+  
+  # Virtual IP ranges for the overlay network
+  ip_pool:
+    base_cidr: "10.100.0.0/16"
+    service_subnet: "10.100.1.0/24"   # VIPs for services
+    client_subnet: "10.100.2.0/24"    # VIPs for clients
+  
+  # Service VIP assignments (no hardcodes - all configurable)
+  services_vips:
+    gateway: "10.100.1.10"
+    api_server: "10.100.1.20"
+    opa_agent: "10.100.1.30"
+    dashboard: "10.100.1.40"
+    policy_server: "10.100.1.50"
+  
+  # Routing
+  routing:
+    topology: "mesh"  # or star, hybrid
+    heartbeat_interval_seconds: 30
+    connection_timeout_seconds: 60
+    
+  # Encryption
+  encryption:
+    type: "mtls"
+    tls_version: "TLSv1.3"
+    cipher_suites:
+      - "TLS_AES_256_GCM_SHA384"
+      - "TLS_CHACHA20_POLY1305_SHA256"

@@ -1,0 +1,32 @@
+controller:
+  name: "Bangladesh ZTA Controller"
+  environment: "development"  # or production
+  
+  # Network settings - ALL configurable
+  control_plane:
+    bind_host: "0.0.0.0"
+    bind_port: 8080
+    public_address: "controller.zta.bangladesh.gov.bd"
+    
+  # Database
+  database:
+    type: "sqlite"  # or postgresql, mysql
+    path: "../database/overlay_network.db"
+    
+  # Security
+  security:
+    mfa_enabled: true
+    session_timeout_hours: 8
+    max_login_attempts: 5
+    
+  # Certificates
+  certificates:
+    ca_cert_path: "../certs/ca.crt"
+    identity_path: "../certs/identities/controller/"
+    
+  # Bangladesh specific
+  bangladesh:
+    business_hours_start: 8  # 8 AM
+    business_hours_end: 16    # 4 PM
+    timezone: "Asia/Dhaka"
+    holiday_calendar: "config/bangladesh_holidays_2026.yaml"

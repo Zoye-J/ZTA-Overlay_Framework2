@@ -1,0 +1,25 @@
+bangladesh_government_departments:
+  - id: "defense"
+    name: "Ministry of Defence"
+    short_name: "MOD"
+    allowed_clearances: ["BASIC", "CONFIDENTIAL", "SECRET"]
+    
+  - id: "intelligence"
+    name: "National Intelligence Bureau"
+    short_name: "NSI"
+    allowed_clearances: ["BASIC", "CONFIDENTIAL", "SECRET", "TOP_SECRET", "SPECIAL"]
+    
+  - id: "home"
+    name: "Ministry of Home Affairs"
+    short_name: "MHA"
+    allowed_clearances: ["BASIC", "CONFIDENTIAL"]
+    
+  - id: "foreign"
+    name: "Ministry of Foreign Affairs"
+    short_name: "MOFA"
+    allowed_clearances: ["BASIC", "CONFIDENTIAL"]
+    
+  - id: "general"
+    name: "General Administration"
+    short_name: "GA"
+    allowed_clearances: ["BASIC"]

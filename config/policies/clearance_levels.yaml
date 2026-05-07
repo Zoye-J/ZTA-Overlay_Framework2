@@ -1,0 +1,25 @@
+clearance_hierarchy:
+  - name: "BASIC"
+    level: 1
+    description: "Unclassified documents - general access"
+    color: "green"
+    
+  - name: "CONFIDENTIAL"
+    level: 2
+    description: "Sensitive but unclassified"
+    color: "blue"
+    
+  - name: "SECRET"
+    level: 3
+    description: "Secret information"
+    color: "orange"
+    
+  - name: "TOP_SECRET"
+    level: 4
+    description: "Top Secret - highest clearance"
+    color: "red"
+    
+  - name: "SPECIAL"
+    level: 5
+    description: "Special access programs"
+    color: "purple"

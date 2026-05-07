@@ -1,0 +1,28 @@
+# Python
+__pycache__/
+*.pyc
+venv/
+venv311/
+.env
+instance/*.db
+
+# Certificates (security!)
+certs/user_keys/
+certs/opa_agent/private.pem
+certs/clients/
+*.key
+
+# VS Code
+.vscode/
+*.code-workspace
+
+# Logs
+*.log
+app/logs/
+
+# Uploads
+uploads/
+
+# System files
+.DS_Store
+Thumbs.db
