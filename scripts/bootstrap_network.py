@@ -1,3 +1,5 @@
+#scripts/bootstrap_network.py
+
 #!/usr/bin/env python
 """
 Bootstrap the entire overlay network from zero

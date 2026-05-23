@@ -7,12 +7,11 @@ local:
   edge_router_proxy_host: "127.0.0.1"
   edge_router_proxy_port: 9999  # Port where Edge Router is listening
   
-# Database (no hardcodes)
+jwt:
+  expiry_hours: 8
+  refresh_expiry_days: 7
+  algorithm: "HS256"
+  
 database:
   type: "sqlite"
   path: "../../database/gateway.db"
-  
-# JWT settings  
-jwt:
-  expiry_hours: 8
-  algorithm: "RS256"

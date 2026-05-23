@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ZTA Overlay Login - Bangladesh Government</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+        .login-container {
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+            width: 450px;
+            padding: 40px;
+        }
+        .logo {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        .logo h1 {
+            color: #333;
+            font-size: 28px;
+        }
+        .logo p {
+            color: #666;
+            font-size: 14px;
+            margin-top: 5px;
+        }
+        .badge {
+            background: #e8f5e9;
+            color: #2e7d32;
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-size: 12px;
+            text-align: center;
+            margin-bottom: 20px;
+            font-weight: bold;
+        }
+        .form-group {
+            margin-bottom: 20px;
+        }
+        label {
+            display: block;
+            margin-bottom: 8px;
+            color: #333;
+            font-weight: 500;
+        }
+        input {
+            width: 100%;
+            padding: 12px 15px;
+            border: 2px solid #e1e5e9;
+            border-radius: 10px;
+            font-size: 14px;
+            transition: all 0.3s;
+        }
+        input:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+        button {
+            width: 100%;
+            padding: 14px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 10px;
+            font-size: 16px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: transform 0.2s;
+        }
+        button:hover {
+            transform: translateY(-2px);
+        }
+        .error {
+            background: #ffebee;
+            color: #c62828;
+            padding: 10px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            font-size: 14px;
+            display: none;
+        }
+        .info {
+            margin-top: 20px;
+            text-align: center;
+            font-size: 12px;
+            color: #999;
+        }
+        .security-badge {
+            margin-top: 20px;
+            text-align: center;
+            font-size: 11px;
+            color: #aaa;
+        }
+        .overlay-notice {
+            background: #e3f2fd;
+            border-left: 4px solid #2196f3;
+            padding: 12px;
+            margin-bottom: 20px;
+            border-radius: 8px;
+            font-size: 12px;
+        }
+    </style>
+</head>
+<body>
+    <div class="login-container">
+        <div class="logo">
+            <h1>🇧🇩 ZTA Overlay Network</h1>
+            <p>Government of Bangladesh - Zero Trust Architecture</p>
+        </div>
+        
+        <div class="overlay-notice">
+            🔒 <strong>Dark Network Active</strong> - No open ports exposed. All traffic encrypted via mTLS overlay.
+        </div>
+        
+        <div class="badge">
+            ⚡ Secure Overlay Connection | Zero Inbound Ports
+        </div>
+        
+        <div class="error" id="errorMsg"></div>
+        
+        <form id="loginForm">
+            <div class="form-group">
+                <label>Username</label>
+                <input type="text" id="username" placeholder="Enter your username" required>
+            </div>
+            <div class="form-group">
+                <label>Password</label>
+                <input type="password" id="password" placeholder="Enter your password" required>
+            </div>
+            <button type="submit">Login to Secure Network</button>
+        </form>
+        
+        <div class="info">
+            <p>Test credentials (for Bangladesh government context):</p>
+            <p><strong>Intelligence Officer:</strong> intelligence_officer / password123 (TOP_SECRET)</p>
+            <p><strong>Defense Staff:</strong> defense_staff / password123 (SECRET)</p>
+            <p><strong>General User:</strong> general_user / password123 (BASIC)</p>
+        </div>
+        
+        <div class="security-badge">
+            <p>mTLS Encrypted Overlay | Policy Enforcement at Controller | Zero Trust Architecture</p>
+        </div>
+    </div>
+    
+    <script>
+        // Edge Router is on localhost:9999 - all traffic goes through overlay
+        const EDGE_ROUTER = 'http://localhost:9999';
+        
+        document.getElementById('loginForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const username = document.getElementById('username').value;
+            const password = document.getElementById('password').value;
+            const errorDiv = document.getElementById('errorMsg');
+            
+            try {
+                // Request goes through Edge Router to Gateway (via overlay network)
+                const response = await fetch(`${EDGE_ROUTER}/api/v1/auth/login`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-Target-Service': 'gateway'
+                    },
+                    body: JSON.stringify({ username, password })
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok) {
+                    localStorage.setItem('zta_token', data.token);
+                    localStorage.setItem('zta_user', JSON.stringify(data.user));
+                    window.location.href = '/dashboard';
+                } else {
+                    errorDiv.style.display = 'block';
+                    errorDiv.textContent = data.error || 'Login failed';
+                }
+            } catch (error) {
+                errorDiv.style.display = 'block';
+                errorDiv.textContent = 'Connection error. Make sure Edge Router is running.';
+            }
+        });
+    </script>
+</body>
+</html>

@@ -1,3 +1,5 @@
+#services.yaml
+
 services:
   # Gateway service
   - name: "gateway"

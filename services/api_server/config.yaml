@@ -1,0 +1,8 @@
+service:
+  name: "api_server"
+  port: 5001
+  bind_host: "127.0.0.1"
+  
+database:
+  type: "sqlite"
+  path: "../../database/api.db"
