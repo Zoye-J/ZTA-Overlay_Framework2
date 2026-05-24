@@ -186,12 +186,29 @@
                 console.log('Response status:', response.status);
                 console.log('Response data:', data);
                 
+                // After successful login, generate RSA key pair for the user
                 if (response.ok && data.access_token) {
+                    // Store tokens
                     localStorage.setItem('zta_access_token', data.access_token);
                     localStorage.setItem('zta_refresh_token', data.refresh_token);
                     localStorage.setItem('zta_user', JSON.stringify(data.user));
-                    console.log('Login successful, redirecting to dashboard...');
+                    
+                    // Generate or load user's RSA key pair for end-to-end encryption
+                    const userId = data.user.id;
+                    let userKeys = await ztaEncryption.loadUserKeys(userId);
+                    
+                    if (!userKeys) {
+                        console.log('Generating new RSA key pair for user...');
+                        const keyPair = await ztaEncryption.generateKeyPair();
+                        await ztaEncryption.storeUserKeys(userId, keyPair, data.access_token);
+                        userKeys = await ztaEncryption.loadUserKeys(userId);
+                        console.log('RSA keys generated and stored securely');
+                    } else {
+                        console.log('Existing RSA keys loaded for user');
+                    }
+                    
                     window.location.href = '/dashboard?token=' + data.access_token;
+                
                 } else {
                     errorDiv.style.display = 'block';
                     errorDiv.textContent = data.error || 'Login failed';
