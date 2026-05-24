@@ -90,29 +90,27 @@
     
     <div class="container">
         <div class="welcome-card">
-            <h1>Welcome, {{ user.full_name if user else 'User' }}!</h1>
-            <div class="clearance clearance-{{ user.clearance_level if user else 'BASIC' }}">
-                Clearance: {{ user.clearance_level if user else 'BASIC' }}
+            <h1>Welcome, <span id="userFullName">User</span>!</h1>
+            <div class="clearance clearance-BASIC" id="userClearanceDiv">
+                Clearance: <span id="userClearance">BASIC</span>
             </div>
-            <p style="margin-top: 15px;">Department: {{ user.department if user else 'General' }}</p>
+            <p style="margin-top: 15px;">Department: <span id="userDepartment">General</span></p>
         </div>
         
         <div class="info-grid">
             <div class="info-card">
                 <h4>🔒 Security Status</h4>
                 <p>Connection via secure overlay network</p>
-                <p>✅ mTLS encrypted</p>
+                <p>✅ HTTPS encrypted</p>
                 <p>✅ Zero open inbound ports</p>
                 <p>✅ Real-time policy enforcement</p>
             </div>
             
             <div class="info-card">
                 <h4>📋 Access Controls</h4>
-                <p>Based on your clearance level ({{ user.clearance_level if user else 'BASIC' }})</p>
+                <p>Based on your clearance level: <strong><span id="accessClearance">BASIC</span></strong></p>
                 <p>You can access documents up to your clearance level</p>
-                {% if user.clearance_level == 'TOP_SECRET' %}
-                <p>⚠️ TOP_SECRET documents: Business hours only (8 AM - 4 PM)</p>
-                {% endif %}
+                <p id="topSecretWarning" style="display:none; color:#f44336;">⚠️ TOP_SECRET documents: Business hours only (8 AM - 4 PM)</p>
             </div>
             
             <div class="info-card">
@@ -125,8 +123,9 @@
         </div>
     </div>
     
+    <script src="/static/js/zta_encryption.js"></script>
     <script>
-        const EDGE_ROUTER = 'http://localhost:9999';
+        const EDGE_ROUTER = 'https://localhost:9999';
         let accessToken = null;
         
         // Get token from URL or localStorage
@@ -142,6 +141,46 @@
         
         if (!accessToken) {
             window.location.href = '/login';
+        }
+        
+        // Load user info from localStorage
+        const userStr = localStorage.getItem('zta_user');
+        if (userStr) {
+            const user = JSON.parse(userStr);
+            document.getElementById('userFullName').innerText = user.full_name;
+            document.getElementById('userClearance').innerText = user.clearance_level;
+            document.getElementById('userDepartment').innerText = user.department;
+            document.getElementById('accessClearance').innerText = user.clearance_level;
+            
+            // Update clearance class
+            const clearanceDiv = document.getElementById('userClearanceDiv');
+            clearanceDiv.className = `clearance clearance-${user.clearance_level}`;
+            
+            // Show TOP_SECRET warning if applicable
+            if (user.clearance_level === 'TOP_SECRET') {
+                document.getElementById('topSecretWarning').style.display = 'block';
+            }
+        } else {
+            // Fetch user info from API if not in localStorage
+            fetchUserInfo();
+        }
+        
+        async function fetchUserInfo() {
+            try {
+                const response = await fetch(`${EDGE_ROUTER}/api/v1/auth/me`, {
+                    headers: {
+                        'Authorization': `Bearer ${accessToken}`,
+                        'X-Target-Service': 'api_server'
+                    }
+                });
+                if (response.ok) {
+                    const user = await response.json();
+                    localStorage.setItem('zta_user', JSON.stringify(user));
+                    location.reload();
+                }
+            } catch(e) {
+                console.error('Failed to fetch user info:', e);
+            }
         }
         
         function goToDocuments() {
@@ -163,15 +202,6 @@
             localStorage.removeItem('zta_refresh_token');
             localStorage.removeItem('zta_user');
             window.location.href = '/login';
-        }
-        
-        // Display user info
-        const userStr = localStorage.getItem('zta_user');
-        if (userStr) {
-            const user = JSON.parse(userStr);
-            document.getElementById('userName').innerText = user.full_name;
-            document.getElementById('userClearance').innerText = user.clearance_level;
-            document.getElementById('userDept').innerText = user.department;
         }
     </script>
 </body>

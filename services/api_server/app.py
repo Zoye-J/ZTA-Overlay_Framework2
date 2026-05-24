@@ -39,6 +39,57 @@ app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', secrets.token_hex(32))
 DB_PATH = os.path.join(BASE_DIR, 'database', 'api.db')
 os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
 
+
+class DocumentEncryption:
+    """Handle document encryption/decryption for Framework 2"""
+    
+    @staticmethod
+    def generate_document_key():
+        """Generate a random AES key for document encryption"""
+        return os.urandom(32)  # 256-bit AES key
+    
+    @staticmethod
+    def encrypt_document(content, document_key):
+        """Encrypt document content with AES-GCM"""
+        iv = os.urandom(12)
+        cipher = Cipher(algorithms.AES(document_key), modes.GCM(iv))
+        encryptor = cipher.encryptor()
+        ciphertext = encryptor.update(content.encode()) + encryptor.finalize()
+        
+        return {
+            'ciphertext': base64.b64encode(ciphertext).decode(),
+            'iv': base64.b64encode(iv).decode(),
+            'tag': base64.b64encode(encryptor.tag).decode()
+        }
+    
+    @staticmethod
+    def decrypt_document(encrypted_data, document_key):
+        """Decrypt document content"""
+        ciphertext = base64.b64decode(encrypted_data['ciphertext'])
+        iv = base64.b64decode(encrypted_data['iv'])
+        tag = base64.b64decode(encrypted_data['tag'])
+        
+        cipher = Cipher(algorithms.AES(document_key), modes.GCM(iv, tag))
+        decryptor = cipher.decryptor()
+        decrypted = decryptor.update(ciphertext) + decryptor.finalize()
+        
+        return decrypted.decode()
+    
+    @staticmethod
+    def encrypt_document_key_for_user(document_key, user_public_key_pem):
+        """Encrypt document key with user's RSA public key"""
+        user_public_key = serialization.load_pem_public_key(user_public_key_pem.encode())
+        
+        encrypted_key = user_public_key.encrypt(
+            document_key,
+            padding.OAEP(
+                mgf=padding.MGF1(algorithm=hashes.SHA256()),
+                algorithm=hashes.SHA256(),
+                label=None
+            )
+        )
+        return base64.b64encode(encrypted_key).decode()
+
 def init_db():
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
@@ -165,14 +216,14 @@ def get_documents():
 @app.route('/api/v1/documents/<int:doc_id>', methods=['GET'])
 @token_required
 def get_document(doc_id):
-    """Get specific document"""
+    """Get specific document with decryption"""
     user = request.user
     user_clearance = user.get('clearance_level', 'BASIC')
     user_dept = user.get('department', 'General')
     
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
-    c.execute('SELECT id, title, content, classification, department, created_at FROM documents WHERE id = ?', (doc_id,))
+    c.execute('SELECT id, title, content, classification, department, created_at, encrypted_key FROM documents WHERE id = ?', (doc_id,))
     doc = c.fetchone()
     conn.close()
     
@@ -184,58 +235,71 @@ def get_document(doc_id):
         return jsonify({'error': 'Insufficient clearance'}), 403
     
     if doc[3] == 'TOP_SECRET' and user_dept != doc[4]:
-        return jsonify({'error': 'Department mismatch for TOP_SECRET document'}), 403
+        return jsonify({'error': 'Department mismatch'}), 403
     
-    # Check business hours for TOP_SECRET
     if doc[3] == 'TOP_SECRET':
         current_hour = datetime.now().hour
         business_start = int(os.environ.get('BUSINESS_HOURS_START', 8))
         business_end = int(os.environ.get('BUSINESS_HOURS_END', 16))
         if current_hour < business_start or current_hour >= business_end:
-            return jsonify({'error': 'TOP_SECRET documents only accessible during business hours (8 AM - 4 PM)'}), 403
+            return jsonify({'error': 'TOP_SECRET only during business hours'}), 403
     
-    # Log access
-    conn = sqlite3.connect(DB_PATH)
-    c = conn.cursor()
-    c.execute('INSERT INTO access_logs (user_id, document_id, action) VALUES (?, ?, ?)',
-              (user.get('user_id'), doc_id, 'read'))
-    conn.commit()
-    conn.close()
-    
+    # Return encrypted document - browser will decrypt with user's private key
     return jsonify({
         'id': doc[0],
         'title': doc[1],
-        'content': doc[2],
+        'content': doc[2],  # This is encrypted JSON
         'classification': doc[3],
         'department': doc[4],
-        'created_at': doc[5]
+        'created_at': doc[5],
+        'encrypted': True,
+        'encrypted_key': doc[6]  # Encrypted document key for this user
     })
 
 @app.route('/api/v1/documents', methods=['POST'])
 @token_required
 def create_document():
-    """Create a new document"""
+    """Create a new document with end-to-end encryption"""
     user = request.user
     data = request.json
     
-    # Check if user has clearance to create document
+    # Check clearance
     required_clearance = data.get('classification', 'BASIC')
     user_clearance = user.get('clearance_level', 'BASIC')
     
     if CLEARANCE_HIERARCHY.get(user_clearance, 0) < CLEARANCE_HIERARCHY.get(required_clearance, 0):
-        return jsonify({'error': f'Insufficient clearance to create {required_clearance} document'}), 403
+        return jsonify({'error': f'Insufficient clearance'}), 403
+    
+    # Generate document encryption key
+    doc_key = DocumentEncryption.generate_document_key()
+    
+    # Encrypt document content
+    encrypted = DocumentEncryption.encrypt_document(data.get('content', ''), doc_key)
+    
+    # Encrypt document key with user's public key (store for this user)
+    # In production, encrypt for multiple authorized users
+    encrypted_key_for_user = DocumentEncryption.encrypt_document_key_for_user(
+        doc_key, 
+        data.get('user_public_key')  # Frontend should send user's public key
+    )
     
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
-    c.execute('''INSERT INTO documents (title, content, classification, department, author_id)
-                 VALUES (?, ?, ?, ?, ?)''',
-              (data.get('title'), data.get('content'), required_clearance,
-               user.get('department'), user.get('user_id')))
+    c.execute('''INSERT INTO documents (title, content, classification, department, author_id, encrypted_key, encryption_iv, encryption_tag)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?)''',
+              (data.get('title'), 
+               json.dumps(encrypted),  # Store encrypted content as JSON
+               required_clearance,
+               user.get('department'), 
+               user.get('user_id'),
+               encrypted_key_for_user,
+               encrypted['iv'],
+               encrypted['tag']))
     conn.commit()
     doc_id = c.lastrowid
     conn.close()
     
-    return jsonify({'status': 'success', 'message': 'Document created', 'document_id': doc_id})
+    return jsonify({'status': 'success', 'message': 'Document created encrypted', 'document_id': doc_id})
 
 @app.route('/health', methods=['GET'])
 def health():

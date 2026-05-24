@@ -187,6 +187,7 @@
             color: #999;
         }
     </style>
+    <script src="/static/js/zta_encryption.js"></script>
 </head>
 <body>
     <div class="navbar">
@@ -379,43 +380,63 @@
         }
         
         async function viewDocument(docId) {
-        const response = await fetchWithAuth(`/api/v1/documents/${docId}`);
-        if (response && response.ok) {
-            const encryptedDoc = await response.json();
-            
-            // Check if document is encrypted
-            if (encryptedDoc.encrypted && encryptedDoc.ciphertext) {
-                console.log('Document is encrypted, decrypting with user\'s private key...');
+            const response = await fetchWithAuth(`/api/v1/documents/${docId}`);
+            if (response && response.ok) {
+                const doc = await response.json();
                 
-                // Load user's private key
-                const userId = JSON.parse(localStorage.getItem('zta_user')).id;
-                const userKeys = await ztaEncryption.loadUserKeys(userId);
+                let content = doc.content;
                 
-                if (userKeys) {
-                    // Decrypt the document content
-                    const decryptedContent = await ztaEncryption.decryptData(
-                        {
-                            ciphertext: encryptedDoc.ciphertext,
-                            iv: encryptedDoc.iv,
-                            encryptedKey: encryptedDoc.encryptedKey
-                        },
-                        userKeys.privateKey
-                    );
+                // Check if document is encrypted (content is JSON string with ciphertext)
+                if (doc.encrypted || (typeof content === 'string' && content.includes('ciphertext'))) {
+                    console.log('Document is encrypted, decrypting...');
                     
-                    encryptedDoc.content = decryptedContent;
-                    console.log('Document decrypted successfully');
-                } else {
-                    console.error('Could not load user keys for decryption');
+                    try {
+                        // Parse encrypted content if it's a string
+                        let encryptedData;
+                        if (typeof content === 'string') {
+                            encryptedData = JSON.parse(content);
+                        } else {
+                            encryptedData = content;
+                        }
+                        
+                        // Load user's private key
+                        const userId = JSON.parse(localStorage.getItem('zta_user')).id;
+                        const userKeys = await ztaEncryption.loadUserKeys(userId);
+                        
+                        if (userKeys && encryptedData.ciphertext) {
+                            // Decrypt the document content
+                            const decryptedContent = await ztaEncryption.decryptData(
+                                {
+                                    ciphertext: encryptedData.ciphertext,
+                                    iv: encryptedData.iv,
+                                    encryptedKey: encryptedData.encryptedKey || doc.encrypted_key
+                                },
+                                userKeys.privateKey
+                            );
+                            content = decryptedContent;
+                            console.log('Document decrypted successfully');
+                        } else {
+                            console.warn('No user keys found or invalid encrypted data');
+                            content = '[Encrypted Content - Unable to decrypt]';
+                        }
+                    } catch (e) {
+                        console.error('Decryption failed:', e);
+                        content = '[Encrypted Content - Decryption Error]';
+                    }
                 }
+                
+                // Display document
+                document.getElementById('modalTitle').innerHTML = escapeHtml(doc.title);
+                document.getElementById('modalContent').innerHTML = escapeHtml(content);
+                document.getElementById('modalMeta').innerHTML = `Classification: ${doc.classification} | Department: ${doc.department} | ${doc.encrypted ? '🔒 End-to-End Encrypted' : '📄 Plain Text'}`;
+                document.getElementById('documentModal').style.display = 'flex';
+            } else if (response && response.status === 403) {
+                const error = await response.json();
+                alert(error.error || 'Access denied');
+            } else if (response && response.status === 503) {
+                alert('Service unavailable. Please try again later.');
             }
-            
-            // Display document
-            document.getElementById('modalTitle').innerHTML = escapeHtml(encryptedDoc.title);
-            document.getElementById('modalContent').innerHTML = escapeHtml(encryptedDoc.content);
-            document.getElementById('modalMeta').innerHTML = `Classification: ${encryptedDoc.classification} | Department: ${encryptedDoc.department} | ${encryptedDoc.encrypted ? '🔒 End-to-End Encrypted' : '📄 Plain Text'}`;
-            document.getElementById('documentModal').style.display = 'flex';
         }
-    }
         
         function escapeHtml(text) {
             const div = document.createElement('div');

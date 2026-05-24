@@ -114,6 +114,7 @@
             font-size: 12px;
         }
     </style>
+    <script src="/static/js/zta_encryption.js"></script>
 </head>
 <body>
     <div class="login-container">
@@ -178,8 +179,6 @@
                         'X-Target-Service': 'gateway'
                     },
                     body: JSON.stringify({ username, password }),
-                    mode: 'cors',
-                    credentials: 'include'
                 });
                 
                 const data = await response.json();

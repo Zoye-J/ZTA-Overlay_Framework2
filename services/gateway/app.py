@@ -36,9 +36,6 @@ app = Flask(__name__,
     static_folder=os.path.join(BASE_DIR, 'static')
 )
 
-app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', secrets.token_hex(32))
-
-
 
 # JWT Configuration
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', secrets.token_hex(32))
@@ -179,13 +176,18 @@ def login_page():
     """Serve login page"""
     return render_template('overlay_login.html')
 
-# Simple CORS - allow all for development
+
+# Simple CORS - single handler
 @app.after_request
 def add_cors_headers(response):
-    response.headers['Access-Control-Allow-Origin'] = request.headers.get('Origin', '*')
+    origin = request.headers.get('Origin', '')
+    if 'localhost' in origin or '127.0.0.1' in origin:
+        response.headers['Access-Control-Allow-Origin'] = origin
+    else:
+        response.headers['Access-Control-Allow-Origin'] = 'https://localhost:5000'
+    
     response.headers['Access-Control-Allow-Methods'] = 'GET, POST, PUT, DELETE, OPTIONS'
     response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization'
-    response.headers['Access-Control-Allow-Credentials'] = 'true'
     return response
 
 @app.route('/health', methods=['GET'])
