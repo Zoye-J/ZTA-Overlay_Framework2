@@ -37,7 +37,15 @@ app = Flask(__name__,
 )
 
 # Enable CORS for the overlay network
-CORS(app, resources={r"/api/*": {"origins": "*"}})
+CORS(app, resources={
+    r"/api/*": {
+        "origins": "*",
+        "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+        "allow_headers": ["Content-Type", "Authorization"],
+        "expose_headers": ["Content-Type", "Authorization"],
+        "supports_credentials": True
+    }
+})
 
 # JWT Configuration
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', secrets.token_hex(32))
@@ -178,11 +186,28 @@ def login_page():
     """Serve login page"""
     return render_template('overlay_login.html')
 
+@app.route('/api/v1/auth/health', methods=['GET'])
+def auth_health():
+    """Health check for auth service"""
+    return jsonify({'status': 'healthy', 'service': 'gateway'})
+
 @app.route('/dashboard')
-@token_required
 def dashboard_page():
     """Serve user dashboard page"""
-    return render_template('overlay_user_dashboard.html', user=request.user)
+    # Check for token in query parameter or header
+    token = request.args.get('token')
+    if token:
+        # Store token in session or pass to template
+        return render_template('overlay_user_dashboard.html', user=request.user if hasattr(request, 'user') else None, token=token)
+    
+    # Try to get from header
+    auth_header = request.headers.get('Authorization')
+    if auth_header and auth_header.startswith('Bearer '):
+        token = auth_header[7:]
+        return render_template('overlay_user_dashboard.html', user=request.user if hasattr(request, 'user') else None, token=token)
+    
+    # No token found
+    return render_template('overlay_user_dashboard.html', user=None, token=None)
 
 @app.route('/api/v1/auth/login', methods=['POST'])
 def login():

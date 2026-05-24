@@ -126,14 +126,52 @@
     </div>
     
     <script>
+        const EDGE_ROUTER = 'http://localhost:9999';
+        let accessToken = null;
+        
+        // Get token from URL or localStorage
+        const urlParams = new URLSearchParams(window.location.search);
+        const urlToken = urlParams.get('token');
+        
+        if (urlToken) {
+            accessToken = urlToken;
+            localStorage.setItem('zta_access_token', accessToken);
+        } else {
+            accessToken = localStorage.getItem('zta_access_token');
+        }
+        
+        if (!accessToken) {
+            window.location.href = '/login';
+        }
+        
         function goToDocuments() {
             window.location.href = '/';
         }
         
-        function logout() {
-            localStorage.removeItem('zta_token');
+        async function logout() {
+            try {
+                await fetch(`${EDGE_ROUTER}/api/v1/auth/logout`, {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${accessToken}`,
+                        'X-Target-Service': 'gateway'
+                    }
+                });
+            } catch(e) {}
+            
+            localStorage.removeItem('zta_access_token');
+            localStorage.removeItem('zta_refresh_token');
             localStorage.removeItem('zta_user');
             window.location.href = '/login';
+        }
+        
+        // Display user info
+        const userStr = localStorage.getItem('zta_user');
+        if (userStr) {
+            const user = JSON.parse(userStr);
+            document.getElementById('userName').innerText = user.full_name;
+            document.getElementById('userClearance').innerText = user.clearance_level;
+            document.getElementById('userDept').innerText = user.department;
         }
     </script>
 </body>

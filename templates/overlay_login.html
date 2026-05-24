@@ -157,7 +157,7 @@
     </div>
     
     <script>
-        // Edge Router is on localhost:9999 - all traffic goes through overlay
+        // Direct connection to Edge Router
         const EDGE_ROUTER = 'http://localhost:9999';
         
         document.getElementById('loginForm').addEventListener('submit', async (e) => {
@@ -167,8 +167,11 @@
             const password = document.getElementById('password').value;
             const errorDiv = document.getElementById('errorMsg');
             
+            errorDiv.style.display = 'none';
+            
             try {
-                // Request goes through Edge Router to Gateway (via overlay network)
+                console.log('Sending login request to:', `${EDGE_ROUTER}/api/v1/auth/login`);
+                
                 const response = await fetch(`${EDGE_ROUTER}/api/v1/auth/login`, {
                     method: 'POST',
                     headers: {
@@ -179,18 +182,21 @@
                 });
                 
                 const data = await response.json();
+                console.log('Response:', response.status, data);
                 
                 if (response.ok) {
-                    localStorage.setItem('zta_token', data.token);
+                    localStorage.setItem('zta_access_token', data.access_token);
+                    localStorage.setItem('zta_refresh_token', data.refresh_token);
                     localStorage.setItem('zta_user', JSON.stringify(data.user));
-                    window.location.href = '/dashboard';
+                    window.location.href = '/dashboard?token=' + data.access_token;
                 } else {
                     errorDiv.style.display = 'block';
                     errorDiv.textContent = data.error || 'Login failed';
                 }
             } catch (error) {
+                console.error('Login error:', error);
                 errorDiv.style.display = 'block';
-                errorDiv.textContent = 'Connection error. Make sure Edge Router is running.';
+                errorDiv.textContent = 'Connection error: ' + error.message;
             }
         });
     </script>
