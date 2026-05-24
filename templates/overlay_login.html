@@ -157,7 +157,6 @@
     </div>
     
     <script>
-        // Use HTTPS for Edge Router
         const EDGE_ROUTER = 'https://localhost:9999';
         
         document.getElementById('loginForm').addEventListener('submit', async (e) => {
@@ -184,12 +183,14 @@
                 });
                 
                 const data = await response.json();
-                console.log('Response:', response.status, data);
+                console.log('Response status:', response.status);
+                console.log('Response data:', data);
                 
-                if (response.ok) {
+                if (response.ok && data.access_token) {
                     localStorage.setItem('zta_access_token', data.access_token);
                     localStorage.setItem('zta_refresh_token', data.refresh_token);
                     localStorage.setItem('zta_user', JSON.stringify(data.user));
+                    console.log('Login successful, redirecting to dashboard...');
                     window.location.href = '/dashboard?token=' + data.access_token;
                 } else {
                     errorDiv.style.display = 'block';
