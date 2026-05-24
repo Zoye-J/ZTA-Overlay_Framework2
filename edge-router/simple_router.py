@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#edge-router/simple_router.py
 """Simplified Edge Router for testing - The "Secret Sauce" of ZTA Overlay"""
 import os
 import sys
@@ -7,6 +7,12 @@ import json
 import requests
 from flask import Flask, request, Response
 from flask_cors import CORS
+import urllib3
+import ssl
+from OpenSSL import crypto
+
+# Disable SSL warnings for self-signed certs
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 # Add parent to path
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -27,12 +33,12 @@ if not os.path.exists(CONFIG_PATH):
 with open(CONFIG_PATH, 'r') as f:
     CONFIG = yaml.safe_load(f)
 
-# Service registry
+# Service registry - Uses HTTPS
 SERVICE_REGISTRY = {
-    'gateway': 'http://127.0.0.1:5000',
-    'api_server': 'http://127.0.0.1:5001',
-    'opa_agent': 'http://127.0.0.1:8282',
-    'dashboard': 'http://127.0.0.1:5002'
+    'gateway': 'https://127.0.0.1:5000',
+    'api_server': 'https://127.0.0.1:5001',
+    'opa_agent': 'https://127.0.0.1:8282',
+    'dashboard': 'https://127.0.0.1:5002'
 }
 
 app = Flask(__name__)
@@ -56,7 +62,11 @@ def proxy_all(path):
     
     # Handle OPTIONS preflight
     if request.method == "OPTIONS":
-        return Response(status=200)
+        response = Response(status=200)
+        response.headers.add('Access-Control-Allow-Origin', '*')
+        response.headers.add('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS, PATCH')
+        response.headers.add('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Target-Service')
+        return response
     
     # Determine target service
     target_service = request.headers.get('X-Target-Service')
@@ -82,14 +92,18 @@ def proxy_all(path):
     
     # Forward the request
     try:
-        # Prepare headers (remove problematic ones)
+        # Prepare headers
         forward_headers = {}
         for k, v in request.headers.items():
             if k.lower() not in ['x-target-service', 'host', 'content-length', 'origin']:
                 forward_headers[k] = v
         
+        # Create a session with custom SSL context that accepts self-signed certs
+        session = requests.Session()
+        session.verify = False  # Disable SSL verification for self-signed certs
+        
         # Forward the request
-        resp = requests.request(
+        resp = session.request(
             method=request.method,
             url=full_url,
             headers=forward_headers,
@@ -97,18 +111,19 @@ def proxy_all(path):
             timeout=30
         )
         
-        # Return response
+        # Return response with CORS headers
         response = Response(
             response=resp.content,
             status=resp.status_code,
             headers=dict(resp.headers)
         )
+        response.headers.add('Access-Control-Allow-Origin', '*')
         return response
         
-    except requests.exceptions.ConnectionError:
-        print(f"[Edge Router] Connection error to {target_service}")
+    except requests.exceptions.ConnectionError as e:
+        print(f"[Edge Router] Connection error to {target_service}: {e}")
         return Response(
-            response=json.dumps({'error': f'Service {target_service} is not available'}),
+            response=json.dumps({'error': f'Service {target_service} is not available', 'details': str(e)}),
             status=503,
             mimetype='application/json'
         )
@@ -134,9 +149,42 @@ def health():
 
 if __name__ == '__main__':
     print("=" * 60)
-    print("ZTA Edge Router - Overlay Network Gateway")
+    print("ZTA Edge Router - Overlay Network Gateway (HTTPS Proxy)")
     print("=" * 60)
-    print(f"Listening on: 0.0.0.0:{CONFIG['local']['proxy_port']}")
+    print(f"Listening on: https://0.0.0.0:{CONFIG['local']['proxy_port']}")
     print(f"Services: {', '.join(SERVICE_REGISTRY.keys())}")
+    print(f"Note: Using self-signed certificates - browser will show warning")
     print("=" * 60)
-    app.run(host='0.0.0.0', port=CONFIG['local']['proxy_port'], debug=True, use_reloader=False)
+    
+    # Edge Router SSL certificates
+    cert_path = os.path.join(BASE_DIR, 'certs', 'identities', 'gateway', 'gateway.crt')
+    key_path = os.path.join(BASE_DIR, 'certs', 'identities', 'gateway', 'gateway.key')
+    
+    # Create a simple SSL context if certificates don't exist
+    if not os.path.exists(cert_path) or not os.path.exists(key_path):
+        print("Certificates not found, generating temporary self-signed certificate...")
+        # Generate a temporary self-signed certificate
+        from OpenSSL import crypto
+        k = crypto.PKey()
+        k.generate_key(crypto.TYPE_RSA, 2048)
+        
+        cert = crypto.X509()
+        cert.get_subject().CN = "localhost"
+        cert.set_serial_number(1000)
+        cert.gmtime_adj_notBefore(0)
+        cert.gmtime_adj_notAfter(365*24*60*60)
+        cert.set_issuer(cert.get_subject())
+        cert.set_pubkey(k)
+        cert.sign(k, 'sha256')
+        
+        cert_path = "temp.crt"
+        key_path = "temp.key"
+        
+        with open(cert_path, "wb") as f:
+            f.write(crypto.dump_certificate(crypto.FILETYPE_PEM, cert))
+        with open(key_path, "wb") as f:
+            f.write(crypto.dump_privatekey(crypto.FILETYPE_PEM, k))
+    
+    # Run the app with SSL
+    app.run(host='0.0.0.0', port=CONFIG['local']['proxy_port'], 
+            debug=True, use_reloader=False, ssl_context=(cert_path, key_path))

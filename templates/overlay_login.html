@@ -157,8 +157,8 @@
     </div>
     
     <script>
-        // Direct connection to Edge Router
-        const EDGE_ROUTER = 'http://localhost:9999';
+        // Use HTTPS for Edge Router
+        const EDGE_ROUTER = 'https://localhost:9999';
         
         document.getElementById('loginForm').addEventListener('submit', async (e) => {
             e.preventDefault();
@@ -178,7 +178,9 @@
                         'Content-Type': 'application/json',
                         'X-Target-Service': 'gateway'
                     },
-                    body: JSON.stringify({ username, password })
+                    body: JSON.stringify({ username, password }),
+                    mode: 'cors',
+                    credentials: 'include'
                 });
                 
                 const data = await response.json();
@@ -196,7 +198,7 @@
             } catch (error) {
                 console.error('Login error:', error);
                 errorDiv.style.display = 'block';
-                errorDiv.textContent = 'Connection error: ' + error.message;
+                errorDiv.textContent = 'Connection error: ' + error.message + ' - Make sure you accept the self-signed certificate';
             }
         });
     </script>

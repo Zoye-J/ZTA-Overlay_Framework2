@@ -239,7 +239,7 @@
     </div>
     
     <script>
-        const EDGE_ROUTER = 'http://localhost:9999';
+        const EDGE_ROUTER = 'https://localhost:9999';
         let currentUser = null;
         let refreshToken = null;
         
@@ -283,40 +283,55 @@
         }
         
         // Fetch with automatic token refresh
-        async function fetchWithAuth(url, options = {}) {
-            let token = getAccessToken();
-            
-            // Check if token is expired
-            const expiry = localStorage.getItem('token_expiry');
-            if (expiry && Date.now() > parseInt(expiry)) {
-                token = await refreshAccessToken();
-                if (!token) {
-                    window.location.href = '/login';
-                    return null;
-                }
+         async function fetchWithAuth(url, options = {}) {
+            const token = getAccessToken();
+            if (!token) {
+                window.location.href = '/login';
+                return null;
             }
             
             options.headers = {
                 ...options.headers,
                 'Authorization': `Bearer ${token}`,
-                'X-Target-Service': options.targetService || 'api_server'
+                'X-Target-Service': 'api_server'
             };
             
-            const response = await fetch(`${EDGE_ROUTER}${url}`, options);
-            
-            // If unauthorized, try to refresh once
-            if (response.status === 401) {
-                token = await refreshAccessToken();
-                if (token) {
-                    options.headers['Authorization'] = `Bearer ${token}`;
-                    return await fetch(`${EDGE_ROUTER}${url}`, options);
-                } else {
+            try {
+                const response = await fetch(`${EDGE_ROUTER}${url}`, {
+                    ...options,
+                    mode: 'cors',
+                    credentials: 'include'
+                });
+                
+                if (response.status === 401) {
+                    const refreshToken = localStorage.getItem('zta_refresh_token');
+                    if (refreshToken) {
+                        const refreshResponse = await fetch(`${EDGE_ROUTER}/api/v1/auth/refresh`, {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                                'X-Target-Service': 'gateway'
+                            },
+                            body: JSON.stringify({ refresh_token: refreshToken }),
+                            mode: 'cors'
+                        });
+                        
+                        if (refreshResponse.ok) {
+                            const data = await refreshResponse.json();
+                            localStorage.setItem('zta_access_token', data.access_token);
+                            options.headers['Authorization'] = `Bearer ${data.access_token}`;
+                            return await fetch(`${EDGE_ROUTER}${url}`, options);
+                        }
+                    }
                     window.location.href = '/login';
                     return null;
                 }
+                
+                return response;
+            } catch (error) {
+                console.error('Fetch error:', error);
+                return null;
             }
-            
-            return response;
         }
         
         // Login function

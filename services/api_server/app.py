@@ -5,10 +5,11 @@ import sys
 import yaml
 import sqlite3
 import json
-from datetime import datetime
+from datetime import datetime, timedelta
 from functools import wraps
 from flask import Flask, request, jsonify
 import jwt
+import secrets
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, BASE_DIR)
@@ -26,7 +27,8 @@ with open(CLEARANCE_PATH, 'r') as f:
 CLEARANCE_HIERARCHY = {c['name']: c['level'] for c in CLEARANCE_LEVELS['clearance_hierarchy']}
 
 app = Flask(__name__)
-app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'change-me')
+# Use the same SECRET_KEY as gateway - load from env
+app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', secrets.token_hex(32))
 
 # Database
 DB_PATH = os.path.join(BASE_DIR, 'database', 'api.db')
@@ -51,49 +53,85 @@ def init_db():
                   timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP)''')
     conn.commit()
     conn.close()
+    print("[API Server] Database initialized")
 
 init_db()
 
 def verify_token(token):
     """Verify JWT token"""
+    if not token:
+        return None
     try:
-        return jwt.decode(token, app.config['SECRET_KEY'], algorithms=['HS256'])
-    except:
+        # Remove 'Bearer ' prefix if present
+        if token.startswith('Bearer '):
+            token = token[7:]
+        
+        # Decode token
+        payload = jwt.decode(
+            token, 
+            app.config['SECRET_KEY'], 
+            algorithms=['HS256'],
+            options={'verify_exp': True}
+        )
+        return payload
+    except jwt.ExpiredSignatureError:
+        print("[API Server] Token expired")
+        return None
+    except jwt.InvalidTokenError as e:
+        print(f"[API Server] Invalid token: {e}")
         return None
 
-def clearance_required(required_level):
-    def decorator(f):
-        @wraps(f)
-        def decorated(*args, **kwargs):
-            token = request.headers.get('Authorization', '').replace('Bearer ', '')
-            user = verify_token(token)
-            if not user:
-                return jsonify({'error': 'Invalid token'}), 401
-            
-            user_clearance = user.get('clearance_level', 'BASIC')
-            if CLEARANCE_HIERARCHY.get(user_clearance, 0) < CLEARANCE_HIERARCHY.get(required_level, 0):
-                return jsonify({'error': f'Insufficient clearance. Required: {required_level}'}), 403
-            
-            request.user = user
-            return f(*args, **kwargs)
-        return decorated
-    return decorator
+def token_required(f):
+    """Decorator to verify JWT token"""
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        token = request.headers.get('Authorization', '')
+        user = verify_token(token)
+        
+        if not user:
+            return jsonify({'error': 'Invalid or expired token'}), 401
+        
+        request.user = user
+        return f(*args, **kwargs)
+    return decorated
+
+@app.route('/api/v1/auth/me', methods=['GET'])
+@token_required
+def get_current_user():
+    """Get current user info from token"""
+    return jsonify({
+        'user_id': request.user.get('user_id'),
+        'username': request.user.get('username'),
+        'full_name': request.user.get('full_name'),
+        'department': request.user.get('department'),
+        'clearance_level': request.user.get('clearance_level')
+    })
+
+@app.route('/api/v1/auth/verify', methods=['GET'])
+@token_required
+def verify_token_endpoint():
+    """Verify if current token is valid"""
+    return jsonify({
+        'valid': True,
+        'user': request.user,
+        'expires_at': request.user.get('exp')
+    })
 
 @app.route('/api/v1/documents', methods=['GET'])
-@clearance_required('BASIC')
+@token_required
 def get_documents():
     """Get documents accessible to user"""
     user = request.user
     user_clearance = user.get('clearance_level', 'BASIC')
     user_dept = user.get('department', 'General')
     
+    print(f"[API Server] User {user.get('username')} (Clearance: {user_clearance}) requesting documents")
+    
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
     
-    # Get documents based on clearance and department
     c.execute('''SELECT id, title, classification, department, created_at 
-                 FROM documents 
-                 WHERE 1=1''')
+                 FROM documents''')
     all_docs = c.fetchall()
     conn.close()
     
@@ -116,10 +154,11 @@ def get_documents():
                 'created_at': doc[4]
             })
     
+    print(f"[API Server] Returning {len(docs)} documents")
     return jsonify({'documents': docs})
 
 @app.route('/api/v1/documents/<int:doc_id>', methods=['GET'])
-@clearance_required('BASIC')
+@token_required
 def get_document(doc_id):
     """Get specific document"""
     user = request.user
@@ -168,25 +207,49 @@ def get_document(doc_id):
     })
 
 @app.route('/api/v1/documents', methods=['POST'])
-@clearance_required('CONFIDENTIAL')
+@token_required
 def create_document():
     """Create a new document"""
     user = request.user
     data = request.json
     
+    # Check if user has clearance to create document
+    required_clearance = data.get('classification', 'BASIC')
+    user_clearance = user.get('clearance_level', 'BASIC')
+    
+    if CLEARANCE_HIERARCHY.get(user_clearance, 0) < CLEARANCE_HIERARCHY.get(required_clearance, 0):
+        return jsonify({'error': f'Insufficient clearance to create {required_clearance} document'}), 403
+    
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
     c.execute('''INSERT INTO documents (title, content, classification, department, author_id)
                  VALUES (?, ?, ?, ?, ?)''',
-              (data.get('title'), data.get('content'), data.get('classification', 'BASIC'),
+              (data.get('title'), data.get('content'), required_clearance,
                user.get('department'), user.get('user_id')))
     conn.commit()
+    doc_id = c.lastrowid
     conn.close()
     
-    return jsonify({'status': 'success', 'message': 'Document created'})
+    return jsonify({'status': 'success', 'message': 'Document created', 'document_id': doc_id})
+
+@app.route('/health', methods=['GET'])
+def health():
+    """Health check"""
+    return jsonify({'status': 'healthy', 'service': 'api_server'})
 
 if __name__ == '__main__':
     host = SERVICE_CONFIG['service']['bind_host']
     port = SERVICE_CONFIG['service']['port']
-    print(f"API Server starting on {host}:{port} (localhost only)")
-    app.run(host=host, port=port, debug=True, use_reloader=False)
+    
+    # SSL context for HTTPS
+    ssl_context = None
+    cert_path = os.path.join(BASE_DIR, 'certs', 'identities', 'api-server', 'api-server.crt')
+    key_path = os.path.join(BASE_DIR, 'certs', 'identities', 'api-server', 'api-server.key')
+    
+    if os.path.exists(cert_path) and os.path.exists(key_path):
+        ssl_context = (cert_path, key_path)
+        print(f"API Server starting on https://{host}:{port}")
+        app.run(host=host, port=port, debug=True, use_reloader=False, ssl_context=ssl_context)
+    else:
+        print(f"API Server starting on http://{host}:{port}")
+        app.run(host=host, port=port, debug=True, use_reloader=False)

@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#start_overlay_network.py
 """Complete startup script for ZTA Overlay Network"""
 import subprocess
 import time
@@ -111,29 +111,11 @@ if __name__ == '__main__':
     
     processes.append(run_api_server())
     
-    print("\n" + "=" * 60)
-    print("✅ ZTA Overlay Network is RUNNING!")
-    print("=" * 60)
-    print("\n🌐 Access Points:")
-    print("  • Main Dashboard: http://localhost:5000")
-    print("  • Controller API: http://localhost:8080")
-    print("  • Edge Router Proxy: http://localhost:9999")
-    print("\n🔒 Security Features Active:")
-    print("  • All services on localhost only")
-    print("  • Edge router proxies all traffic")
-    print("  • JWT authentication with refresh tokens")
-    print("  • Policy enforcement at controller")
-    print("\n📋 Test Login (use these credentials):")
-    print("  🕵️ Intelligence Officer: intelligence_officer / password123 (TOP_SECRET)")
-    print("  🛡️ Defense Staff: defense_staff / password123 (SECRET)")
-    print("  👤 General User: general_user / password123 (BASIC)")
-    print("\n💡 How it works:")
-    print("  1. Browser connects to Edge Router (localhost:9999)")
-    print("  2. Edge Router proxies to Gateway (localhost:5000)")
-    print("  3. Gateway authenticates via JWT")
-    print("  4. API requests go back through Edge Router")
-    print("  5. NO direct connections to services!")
-    print("\nPress Ctrl+C to stop all services\n")
+    print("\n Access Points:")
+    print("  • Main Dashboard: https://localhost:5000")
+    print("  • Controller API: http://localhost:8080 (HTTP)")
+    print("  • Edge Router Proxy: https://localhost:9999")
+    print("\n⚠️  IMPORTANT: Accept the self-signed certificate warning in your browser")
     
     # Monitor all processes
     threads = []

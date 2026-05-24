@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#services/gateway/app.py
 """Zitified Gateway Service - Only binds to localhost, receives traffic via Edge Router"""
 import os
 import sys
@@ -35,6 +35,8 @@ app = Flask(__name__,
     template_folder=os.path.join(BASE_DIR, 'templates'),
     static_folder=os.path.join(BASE_DIR, 'static')
 )
+
+app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', secrets.token_hex(32))
 
 # Enable CORS for the overlay network
 CORS(app, resources={
@@ -185,6 +187,16 @@ def index():
 def login_page():
     """Serve login page"""
     return render_template('overlay_login.html')
+
+@app.route('/health', methods=['GET'])
+def gateway_health():
+    """Health check for gateway service"""
+    return jsonify({
+        'status': 'healthy',
+        'service': 'gateway',
+        'port': 5000,
+        'protocol': 'https'
+    })
 
 @app.route('/api/v1/auth/health', methods=['GET'])
 def auth_health():
@@ -435,12 +447,28 @@ if __name__ == '__main__':
     # IMPORTANT: Bind ONLY to localhost - no public ports!
     host = SERVICE_CONFIG['service']['bind_host']
     port = SERVICE_CONFIG['service']['port']
-    print(f"=" * 60)
-    print(f"Gateway Service (Zitified)")
-    print(f"=" * 60)
-    print(f"  • Binding to: {host}:{port} (localhost only)")
-    print(f"  • Traffic received via: Edge Router on port 9999")
-    print(f"  • JWT Algorithm: {app.config['JWT_ALGORITHM']}")
-    print(f"  • Token expiry: {app.config['JWT_EXPIRY_HOURS']} hours")
-    print(f"=" * 60)
-    app.run(host=host, port=port, debug=True, use_reloader=False)
+    
+    # SSL context for HTTPS
+    ssl_context = None
+    cert_path = os.path.join(BASE_DIR, 'certs', 'identities', 'gateway', 'gateway.crt')
+    key_path = os.path.join(BASE_DIR, 'certs', 'identities', 'gateway', 'gateway.key')
+    
+    if os.path.exists(cert_path) and os.path.exists(key_path):
+        ssl_context = (cert_path, key_path)
+        print(f"=" * 60)
+        print(f"Gateway Service (Zitified) - HTTPS Enabled")
+        print(f"=" * 60)
+        print(f"  • Binding to: https://{host}:{port}")
+        print(f"  • Certificate: {cert_path}")
+        print(f"  • Traffic received via: Edge Router on port 9999")
+        print(f"  • JWT Algorithm: {app.config['JWT_ALGORITHM']}")
+        print(f"  • Token expiry: {app.config['JWT_EXPIRY_HOURS']} hours")
+        print(f"=" * 60)
+        app.run(host=host, port=port, debug=True, use_reloader=False, ssl_context=ssl_context)
+    else:
+        print(f"=" * 60)
+        print(f"Gateway Service (Zitified) - HTTP Mode (No SSL certs found)")
+        print(f"=" * 60)
+        print(f"  • Binding to: http://{host}:{port}")
+        print(f"=" * 60)
+        app.run(host=host, port=port, debug=True, use_reloader=False)
