@@ -216,21 +216,22 @@ def get_documents():
 @app.route('/api/v1/documents/<int:doc_id>', methods=['GET'])
 @token_required
 def get_document(doc_id):
-    """Get specific document with decryption"""
+    """Get specific document - returns encrypted content"""
     user = request.user
     user_clearance = user.get('clearance_level', 'BASIC')
     user_dept = user.get('department', 'General')
     
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
-    c.execute('SELECT id, title, content, classification, department, created_at, encrypted_key FROM documents WHERE id = ?', (doc_id,))
+    c.execute('''SELECT id, title, content, classification, department, created_at, encrypted_key 
+                 FROM documents WHERE id = ?''', (doc_id,))
     doc = c.fetchone()
     conn.close()
     
     if not doc:
         return jsonify({'error': 'Document not found'}), 404
     
-    # Check access
+    # Access control checks
     if CLEARANCE_HIERARCHY.get(user_clearance, 0) < CLEARANCE_HIERARCHY.get(doc[3], 0):
         return jsonify({'error': 'Insufficient clearance'}), 403
     
@@ -244,16 +245,16 @@ def get_document(doc_id):
         if current_hour < business_start or current_hour >= business_end:
             return jsonify({'error': 'TOP_SECRET only during business hours'}), 403
     
-    # Return encrypted document - browser will decrypt with user's private key
+    # Return encrypted document - content is already encrypted JSON
     return jsonify({
         'id': doc[0],
         'title': doc[1],
-        'content': doc[2],  # This is encrypted JSON
+        'content': doc[2],  # This is the encrypted JSON string
         'classification': doc[3],
         'department': doc[4],
         'created_at': doc[5],
         'encrypted': True,
-        'encrypted_key': doc[6]  # Encrypted document key for this user
+        'encrypted_key': doc[6]
     })
 
 @app.route('/api/v1/documents', methods=['POST'])
