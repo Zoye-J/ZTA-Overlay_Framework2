@@ -176,12 +176,12 @@ def verify_token_endpoint():
 @app.route('/api/v1/documents', methods=['GET'])
 @token_required
 def get_documents():
-    """Get documents accessible to user"""
+    """Get documents accessible to user - Department-based access control"""
     user = request.user
     user_clearance = user.get('clearance_level', 'BASIC')
     user_dept = user.get('department', 'General')
     
-    print(f"[API Server] User {user.get('username')} (Clearance: {user_clearance}) requesting documents")
+    print(f"[API Server] User {user.get('username')} (Clearance: {user_clearance}, Dept: {user_dept}) requesting documents")
     
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
@@ -191,32 +191,49 @@ def get_documents():
     all_docs = c.fetchall()
     conn.close()
     
-    # Filter by clearance hierarchy
+    # Filter based on clearance AND department
     docs = []
     for doc in all_docs:
-        doc_clearance = doc[2]
-        doc_dept = doc[3]
+        doc_id, title, doc_clearance, doc_dept, created_at = doc
         
-        # Check clearance
-        if CLEARANCE_HIERARCHY.get(user_clearance, 0) >= CLEARANCE_HIERARCHY.get(doc_clearance, 0):
-            # For TOP_SECRET, check department match
-            if doc_clearance == 'TOP_SECRET' and user_dept != doc_dept:
-                continue
-            docs.append({
-                'id': doc[0],
-                'title': doc[1],
-                'classification': doc[2],
-                'department': doc[3],
-                'created_at': doc[4]
-            })
+        # Check if user has sufficient clearance
+        if CLEARANCE_HIERARCHY.get(user_clearance, 0) < CLEARANCE_HIERARCHY.get(doc_clearance, 0):
+            print(f"  [DENIED] {title}: Insufficient clearance (need {doc_clearance}, have {user_clearance})")
+            continue
     
-    print(f"[API Server] Returning {len(docs)} documents")
+        
+        if doc_dept == 'General':
+            # General documents: visible to everyone
+            docs.append({
+                'id': doc_id,
+                'title': title,
+                'classification': doc_clearance,
+                'department': doc_dept,
+                'created_at': created_at
+            })
+            print(f"  [ALLOWED] {title}: General document - visible to all departments")
+        elif doc_dept == user_dept:
+            # Same department: visible
+            docs.append({
+                'id': doc_id,
+                'title': title,
+                'classification': doc_clearance,
+                'department': doc_dept,
+                'created_at': created_at
+            })
+            print(f"  [ALLOWED] {title}: Same department ({doc_dept})")
+        else:
+            # Different department: NOT visible
+            print(f"  [DENIED] {title}: Different department (doc: {doc_dept}, user: {user_dept})")
+            continue
+    
+    print(f"[API Server] Returning {len(docs)} documents for {user_dept} department user")
     return jsonify({'documents': docs})
 
 @app.route('/api/v1/documents/<int:doc_id>', methods=['GET'])
 @token_required
 def get_document(doc_id):
-    """Get specific document - returns encrypted content"""
+    """Get specific document - Department-based access control"""
     user = request.user
     user_clearance = user.get('clearance_level', 'BASIC')
     user_dept = user.get('department', 'General')
@@ -231,30 +248,44 @@ def get_document(doc_id):
     if not doc:
         return jsonify({'error': 'Document not found'}), 404
     
-    # Access control checks
-    if CLEARANCE_HIERARCHY.get(user_clearance, 0) < CLEARANCE_HIERARCHY.get(doc[3], 0):
-        return jsonify({'error': 'Insufficient clearance'}), 403
+    doc_id, title, content, doc_clearance, doc_dept, created_at, encrypted_key = doc
     
-    if doc[3] == 'TOP_SECRET' and user_dept != doc[4]:
-        return jsonify({'error': 'Department mismatch'}), 403
+    # Check clearance
+    if CLEARANCE_HIERARCHY.get(user_clearance, 0) < CLEARANCE_HIERARCHY.get(doc_clearance, 0):
+        return jsonify({'error': f'Insufficient clearance. Required: {doc_clearance}'}), 403
     
-    if doc[3] == 'TOP_SECRET':
+    # Department access rules:
+    # 1. General department documents: visible to ALL departments
+    # 2. Other departments: ONLY visible to users from that department
+    if doc_dept != 'General' and doc_dept != user_dept:
+        return jsonify({'error': f'Access denied. This document is restricted to {doc_dept} department only.'}), 403
+    
+    # For TOP_SECRET, additional business hours check
+    if doc_clearance == 'TOP_SECRET':
         current_hour = datetime.now().hour
         business_start = int(os.environ.get('BUSINESS_HOURS_START', 8))
         business_end = int(os.environ.get('BUSINESS_HOURS_END', 16))
         if current_hour < business_start or current_hour >= business_end:
-            return jsonify({'error': 'TOP_SECRET only during business hours'}), 403
+            return jsonify({'error': 'TOP_SECRET documents only accessible during business hours (8 AM - 4 PM)'}), 403
     
-    # Return encrypted document - content is already encrypted JSON
+    # Log access
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    c.execute('INSERT INTO access_logs (user_id, document_id, action) VALUES (?, ?, ?)',
+              (user.get('user_id'), doc_id, 'read'))
+    conn.commit()
+    conn.close()
+    
+    # Return encrypted document
     return jsonify({
-        'id': doc[0],
-        'title': doc[1],
-        'content': doc[2],  # This is the encrypted JSON string
-        'classification': doc[3],
-        'department': doc[4],
-        'created_at': doc[5],
+        'id': doc_id,
+        'title': title,
+        'content': content,
+        'classification': doc_clearance,
+        'department': doc_dept,
+        'created_at': created_at,
         'encrypted': True,
-        'encrypted_key': doc[6]
+        'encrypted_key': encrypted_key
     })
 
 @app.route('/api/v1/documents', methods=['POST'])
