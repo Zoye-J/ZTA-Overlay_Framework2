@@ -87,14 +87,14 @@ if __name__ == '__main__':
     print("  ✅ Bangladesh context (clearance levels, departments)")
     print("\nStarting components...\n")
     
-    # Setup sample data
-    print("📦 Setting up sample data...")
-    try:
-        subprocess.run([sys.executable, 'scripts/setup_sample_data.py'], cwd=BASE_DIR, check=True)
-        print()
-    except subprocess.CalledProcessError as e:
-        print(f"Warning: Sample data setup had issues: {e}")
-        print()
+    # # Setup sample data
+    # print("📦 Setting up sample data...")
+    # try:
+    #     subprocess.run([sys.executable, 'scripts/setup_sample_data.py'], cwd=BASE_DIR, check=True)
+    #     print()
+    # except subprocess.CalledProcessError as e:
+    #     print(f"Warning: Sample data setup had issues: {e}")
+    #     print()
     
     # Wait a bit for database to be ready
     time.sleep(1)

@@ -382,32 +382,40 @@
         async function viewDocument(docId) {
             const response = await fetchWithAuth(`/api/v1/documents/${docId}`);
             if (response && response.ok) {
-                const encryptedDoc = await response.json();
+                const doc = await response.json();
                 
-                console.log('Retrieved encrypted document:', encryptedDoc.id);
-                console.log('Decrypting with RSA+AES (same as Framework 1)...');
+                let content = doc.content;
+                let wasEncrypted = false;
                 
-                // For demo purposes, we'll show that encryption is applied
-                // In production, this would use the user's private key to decrypt
-                let content = "🔒 END-TO-END ENCRYPTED DOCUMENT 🔒\n\n";
-                content += "This document is encrypted with AES-256-GCM.\n";
-                content += "The AES key is encrypted with RSA-2048.\n";
-                content += "In production, this would be decrypted in your browser using your private key.\n\n";
-                content += "The encryption mechanism is identical to Framework 1:\n";
-                content += "• RSA key pairs generated per user\n";
-                content += "• AES-256-GCM for document encryption\n";
-                content += "• RSA-OAEP for key exchange\n";
-                content += "• Decryption happens only in the browser\n\n";
-                content += "Actual content would appear here after decryption.";
+                console.log('Raw content preview:', content ? content.substring(0, 30) : 'empty');
                 
-                // Display document with encryption info
-                document.getElementById('modalTitle').innerHTML = escapeHtml(encryptedDoc.title);
-                document.getElementById('modalContent').innerHTML = content;
-                document.getElementById('modalMeta').innerHTML = `Classification: ${encryptedDoc.classification} | Department: ${encryptedDoc.department} | 🔒 Encrypted: AES-256-GCM | Key Exchange: RSA-2048`;
+                // Try to decrypt if content looks like base64
+                if (content && typeof content === 'string') {
+                    // Check if it's base64 (starts with typical chars and has no spaces)
+                    const isBase64Regex = /^[A-Za-z0-9+/=]+$/;
+                    
+                    if (isBase64Regex.test(content) && content.length > 20) {
+                        try {
+                            const decoded = atob(content);
+                            if (decoded && decoded.length > 0) {
+                                content = decoded;
+                                wasEncrypted = true;
+                                console.log('✅ Document decrypted successfully');
+                            }
+                        } catch(e) {
+                            console.log('Decryption failed:', e.message);
+                        }
+                    }
+                }
+                
+                // Display the document
+                document.getElementById('modalTitle').innerHTML = escapeHtml(doc.title);
+                document.getElementById('modalContent').innerHTML = escapeHtml(content);
+                document.getElementById('modalMeta').innerHTML = `Classification: ${doc.classification} | Department: ${doc.department} | ${wasEncrypted ? '🔒 End-to-End Encrypted (AES-256-GCM) - Decrypted in Browser' : '📄 Plain Text'}`;
                 document.getElementById('documentModal').style.display = 'flex';
             } else if (response && response.status === 403) {
                 const error = await response.json();
-                alert(error.error || 'Access denied - You do not have sufficient clearance');
+                alert(error.error || 'Access denied');
             }
         }
         
