@@ -1,177 +1,432 @@
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ZTA Overlay Login - Bangladesh Government</title>
+    <title>Secure Access — Bangladesh ZTA Network</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@300;400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
     <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
+        *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+        :root {
+            --green-50:  #f0faf4;
+            --green-100: #d6f0e0;
+            --green-200: #aadcc0;
+            --green-400: #4db87a;
+            --green-600: #2a7d4f;
+            --green-800: #1a5235;
+            --navy:      #0d1f2d;
+            --navy-soft: #1b3045;
+            --text-primary:   #0d1f2d;
+            --text-secondary: #4a5e6d;
+            --text-muted:     #7a8f9e;
+            --border:         #d0dde5;
+            --surface:        #ffffff;
+            --surface-alt:    #f6f9fb;
+            --danger:         #c0392b;
         }
+
         body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            font-family: 'IBM Plex Sans', sans-serif;
+            background: var(--surface-alt);
             min-height: 100vh;
-            display: flex;
-            justify-content: center;
-            align-items: center;
+            display: grid;
+            grid-template-columns: 1fr 1fr;
         }
-        .login-container {
-            background: white;
-            border-radius: 20px;
-            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
-            width: 450px;
+
+        /* ── Left panel ──────────────────────────────── */
+        .panel-left {
+            background: var(--navy);
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            padding: 56px 60px;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .panel-left::before {
+            content: '';
+            position: absolute;
+            top: -80px; right: -80px;
+            width: 320px; height: 320px;
+            border-radius: 50%;
+            background: rgba(77, 184, 122, 0.08);
+        }
+        .panel-left::after {
+            content: '';
+            position: absolute;
+            bottom: -100px; left: -60px;
+            width: 260px; height: 260px;
+            border-radius: 50%;
+            background: rgba(77, 184, 122, 0.06);
+        }
+
+        .brand {
+            position: relative; z-index: 1;
+        }
+
+        .brand-mark {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 48px;
+        }
+
+        .brand-icon {
+            width: 36px; height: 36px;
+            background: var(--green-400);
+            border-radius: 8px;
+            display: flex; align-items: center; justify-content: center;
+        }
+
+        .brand-icon svg {
+            width: 20px; height: 20px;
+            fill: none;
+            stroke: #fff;
+            stroke-width: 2;
+            stroke-linecap: round;
+            stroke-linejoin: round;
+        }
+
+        .brand-name {
+            font-size: 14px;
+            font-weight: 500;
+            color: rgba(255,255,255,0.7);
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+        }
+
+        .panel-left h1 {
+            font-size: 36px;
+            font-weight: 300;
+            color: #ffffff;
+            line-height: 1.25;
+            margin-bottom: 20px;
+        }
+
+        .panel-left h1 strong {
+            font-weight: 600;
+            color: var(--green-200);
+        }
+
+        .panel-left p {
+            font-size: 15px;
+            color: rgba(255,255,255,0.5);
+            line-height: 1.7;
+            max-width: 340px;
+        }
+
+        .features {
+            position: relative; z-index: 1;
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+        }
+
+        .feature-row {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .feature-dot {
+            width: 6px; height: 6px;
+            border-radius: 50%;
+            background: var(--green-400);
+            flex-shrink: 0;
+        }
+
+        .feature-row span {
+            font-size: 13px;
+            color: rgba(255,255,255,0.55);
+            font-family: 'IBM Plex Mono', monospace;
+        }
+
+        .panel-footer {
+            position: relative; z-index: 1;
+            font-size: 12px;
+            color: rgba(255,255,255,0.25);
+        }
+
+        /* ── Right panel (form) ───────────────────────── */
+        .panel-right {
+            display: flex;
+            align-items: center;
+            justify-content: center;
             padding: 40px;
         }
-        .logo {
-            text-align: center;
-            margin-bottom: 30px;
+
+        .login-box {
+            width: 100%;
+            max-width: 400px;
         }
-        .logo h1 {
-            color: #333;
-            font-size: 28px;
+
+        .login-box h2 {
+            font-size: 24px;
+            font-weight: 500;
+            color: var(--text-primary);
+            margin-bottom: 6px;
         }
-        .logo p {
-            color: #666;
+
+        .login-box .subtitle {
             font-size: 14px;
-            margin-top: 5px;
+            color: var(--text-secondary);
+            margin-bottom: 36px;
         }
-        .badge {
-            background: #e8f5e9;
-            color: #2e7d32;
-            padding: 8px 16px;
-            border-radius: 20px;
+
+        .status-pill {
+            display: inline-flex;
+            align-items: center;
+            gap: 7px;
+            background: var(--green-50);
+            border: 1px solid var(--green-200);
+            border-radius: 100px;
+            padding: 6px 14px;
             font-size: 12px;
-            text-align: center;
-            margin-bottom: 20px;
-            font-weight: bold;
+            color: var(--green-600);
+            font-weight: 500;
+            margin-bottom: 32px;
         }
+
+        .status-dot {
+            width: 6px; height: 6px;
+            border-radius: 50%;
+            background: var(--green-400);
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.4; }
+        }
+
         .form-group {
             margin-bottom: 20px;
         }
+
         label {
             display: block;
-            margin-bottom: 8px;
-            color: #333;
+            font-size: 13px;
             font-weight: 500;
+            color: var(--text-primary);
+            margin-bottom: 8px;
         }
-        input {
+
+        input[type="text"], input[type="password"] {
             width: 100%;
-            padding: 12px 15px;
-            border: 2px solid #e1e5e9;
-            border-radius: 10px;
+            padding: 11px 14px;
             font-size: 14px;
-            transition: all 0.3s;
-        }
-        input:focus {
-            outline: none;
-            border-color: #667eea;
-        }
-        button {
-            width: 100%;
-            padding: 14px;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            border: none;
-            border-radius: 10px;
-            font-size: 16px;
-            font-weight: bold;
-            cursor: pointer;
-            transition: transform 0.2s;
-        }
-        button:hover {
-            transform: translateY(-2px);
-        }
-        .error {
-            background: #ffebee;
-            color: #c62828;
-            padding: 10px;
+            font-family: 'IBM Plex Sans', sans-serif;
+            background: var(--surface);
+            border: 1px solid var(--border);
             border-radius: 8px;
-            margin-bottom: 20px;
+            color: var(--text-primary);
+            transition: border-color 0.15s, box-shadow 0.15s;
+            outline: none;
+        }
+
+        input[type="text"]:focus, input[type="password"]:focus {
+            border-color: var(--green-400);
+            box-shadow: 0 0 0 3px rgba(77, 184, 122, 0.15);
+        }
+
+        .login-btn {
+            width: 100%;
+            padding: 12px;
+            background: var(--navy);
+            color: #fff;
+            border: none;
+            border-radius: 8px;
             font-size: 14px;
+            font-weight: 500;
+            font-family: 'IBM Plex Sans', sans-serif;
+            cursor: pointer;
+            transition: background 0.15s, transform 0.1s;
+            margin-top: 8px;
+            letter-spacing: 0.01em;
+        }
+
+        .login-btn:hover { background: var(--navy-soft); }
+        .login-btn:active { transform: scale(0.99); }
+
+        .login-btn.loading {
+            opacity: 0.7;
+            cursor: not-allowed;
+        }
+
+        .error-msg {
+            background: #fff5f5;
+            border: 1px solid #f5c6c6;
+            color: var(--danger);
+            padding: 10px 14px;
+            border-radius: 8px;
+            font-size: 13px;
+            margin-bottom: 20px;
             display: none;
         }
-        .info {
-            margin-top: 20px;
-            text-align: center;
-            font-size: 12px;
-            color: #999;
+
+        .divider {
+            height: 1px;
+            background: var(--border);
+            margin: 28px 0;
         }
-        .security-badge {
-            margin-top: 20px;
-            text-align: center;
-            font-size: 11px;
-            color: #aaa;
-        }
-        .overlay-notice {
-            background: #e3f2fd;
-            border-left: 4px solid #2196f3;
-            padding: 12px;
-            margin-bottom: 20px;
+
+        .credentials-hint {
+            background: var(--surface-alt);
+            border: 1px solid var(--border);
             border-radius: 8px;
+            padding: 14px 16px;
+        }
+
+        .credentials-hint p {
             font-size: 12px;
+            color: var(--text-muted);
+            margin-bottom: 10px;
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+            font-weight: 500;
+        }
+
+        .cred-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 5px 0;
+        }
+
+        .cred-row span:first-child {
+            font-size: 13px;
+            color: var(--text-secondary);
+        }
+
+        .clearance-tag {
+            font-size: 11px;
+            font-weight: 500;
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-family: 'IBM Plex Mono', monospace;
+        }
+        .tag-ts  { background: #fce8e8; color: #a32d2d; }
+        .tag-s   { background: #fff4e0; color: #7a4a00; }
+        .tag-b   { background: var(--green-50); color: var(--green-800); }
+
+        @media (max-width: 768px) {
+            body { grid-template-columns: 1fr; }
+            .panel-left { display: none; }
         }
     </style>
-    <script src="/static/js/zta_encryption.js"></script>
+    <script src="/static/js/zta_encryption.js" defer></script>
 </head>
 <body>
-    <div class="login-container">
-        <div class="logo">
-            <h1>🇧🇩 ZTA Overlay Network</h1>
-            <p>Government of Bangladesh - Zero Trust Architecture</p>
-        </div>
-        
-        <div class="overlay-notice">
-            🔒 <strong>Dark Network Active</strong> - No open ports exposed. All traffic encrypted via mTLS overlay.
-        </div>
-        
-        <div class="badge">
-            ⚡ Secure Overlay Connection | Zero Inbound Ports
-        </div>
-        
-        <div class="error" id="errorMsg"></div>
-        
-        <form id="loginForm">
-            <div class="form-group">
-                <label>Username</label>
-                <input type="text" id="username" placeholder="Enter your username" required>
+
+    <!-- Left panel -->
+    <div class="panel-left">
+        <div class="brand">
+            <div class="brand-mark">
+                <div class="brand-icon">
+                    <svg viewBox="0 0 24 24"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+                </div>
+                <span class="brand-name">ZTA Overlay — Bangladesh</span>
             </div>
-            <div class="form-group">
-                <label>Password</label>
-                <input type="password" id="password" placeholder="Enter your password" required>
-            </div>
-            <button type="submit">Login to Secure Network</button>
-        </form>
-        
-        <div class="info">
-            <p>Test credentials (for Bangladesh government context):</p>
-            <p><strong>Intelligence Officer:</strong> intelligence_officer / password123 (TOP_SECRET)</p>
-            <p><strong>Defense Staff:</strong> defense_staff / password123 (SECRET)</p>
-            <p><strong>General User:</strong> general_user / password123 (BASIC)</p>
+            <h1>Zero Trust<br><strong>Network Access</strong></h1>
+            <p>All traffic is encrypted end-to-end. No inbound ports are exposed. Every connection is verified against policy before data moves.</p>
         </div>
-        
-        <div class="security-badge">
-            <p>mTLS Encrypted Overlay | Policy Enforcement at Controller | Zero Trust Architecture</p>
+
+        <div class="features">
+            <div class="feature-row">
+                <div class="feature-dot"></div>
+                <span>mTLS mutual authentication</span>
+            </div>
+            <div class="feature-row">
+                <div class="feature-dot"></div>
+                <span>Zero inbound ports exposed</span>
+            </div>
+            <div class="feature-row">
+                <div class="feature-dot"></div>
+                <span>Clearance-level policy enforcement</span>
+            </div>
+            <div class="feature-row">
+                <div class="feature-dot"></div>
+                <span>Bangladesh business-hours controls</span>
+            </div>
+            <div class="feature-row">
+                <div class="feature-dot"></div>
+                <span>Overlay network — VIP 10.100.x.x</span>
+            </div>
+        </div>
+
+        <div class="panel-footer">
+            Government of Bangladesh &mdash; Ministry of Digital Technology &mdash; Classified System
         </div>
     </div>
-    
+
+    <!-- Right panel -->
+    <div class="panel-right">
+        <div class="login-box">
+
+            <div class="status-pill">
+                <div class="status-dot"></div>
+                Dark network active — overlay connected
+            </div>
+
+            <h2>Secure sign-in</h2>
+            <p class="subtitle">Authenticate to access the ZTA overlay network</p>
+
+            <div class="error-msg" id="errorMsg"></div>
+
+            <form id="loginForm" autocomplete="off">
+                <div class="form-group">
+                    <label for="username">Username</label>
+                    <input type="text" id="username" name="username" autocomplete="username" placeholder="Enter your username" required>
+                </div>
+                <div class="form-group">
+                    <label for="password">Password</label>
+                    <input type="password" id="password" name="password" autocomplete="current-password" placeholder="Enter your password" required>
+                </div>
+                <button type="submit" class="login-btn" id="loginBtn">Sign in to secure network</button>
+            </form>
+
+            <div class="divider"></div>
+
+            <div class="credentials-hint">
+                <p>Demo credentials</p>
+                <div class="cred-row">
+                    <span>intelligence_officer / password123</span>
+                    <span class="clearance-tag tag-ts">TOP_SECRET</span>
+                </div>
+                <div class="cred-row">
+                    <span>defense_staff / password123</span>
+                    <span class="clearance-tag tag-s">SECRET</span>
+                </div>
+                <div class="cred-row">
+                    <span>general_user / password123</span>
+                    <span class="clearance-tag tag-b">BASIC</span>
+                </div>
+            </div>
+
+        </div>
+    </div>
+
     <script>
         const EDGE_ROUTER = 'https://localhost:9999';
-        
+
         document.getElementById('loginForm').addEventListener('submit', async (e) => {
             e.preventDefault();
-            
+
             const username = document.getElementById('username').value;
             const password = document.getElementById('password').value;
             const errorDiv = document.getElementById('errorMsg');
-            
+            const btn = document.getElementById('loginBtn');
+
             errorDiv.style.display = 'none';
-            
+            btn.classList.add('loading');
+            btn.textContent = 'Authenticating...';
+
             try {
-                console.log('Sending login request to:', `${EDGE_ROUTER}/api/v1/auth/login`);
-                
                 const response = await fetch(`${EDGE_ROUTER}/api/v1/auth/login`, {
                     method: 'POST',
                     headers: {
@@ -180,42 +435,35 @@
                     },
                     body: JSON.stringify({ username, password }),
                 });
-                
+
                 const data = await response.json();
-                console.log('Response status:', response.status);
-                console.log('Response data:', data);
-                
-                // After successful login, generate RSA key pair for the user
+
                 if (response.ok && data.access_token) {
-                    // Store tokens
                     localStorage.setItem('zta_access_token', data.access_token);
                     localStorage.setItem('zta_refresh_token', data.refresh_token);
                     localStorage.setItem('zta_user', JSON.stringify(data.user));
-                    
-                    // Generate or load user's RSA key pair for end-to-end encryption
+
                     const userId = data.user.id;
-                    let userKeys = await ztaEncryption.loadUserKeys(userId);
-                    
-                    if (!userKeys) {
-                        console.log('Generating new RSA key pair for user...');
-                        const keyPair = await ztaEncryption.generateKeyPair();
-                        await ztaEncryption.storeUserKeys(userId, keyPair, data.access_token);
-                        userKeys = await ztaEncryption.loadUserKeys(userId);
-                        console.log('RSA keys generated and stored securely');
-                    } else {
-                        console.log('Existing RSA keys loaded for user');
+                    if (typeof ztaEncryption !== 'undefined') {
+                        let userKeys = await ztaEncryption.loadUserKeys(userId);
+                        if (!userKeys) {
+                            const keyPair = await ztaEncryption.generateKeyPair();
+                            await ztaEncryption.storeUserKeys(userId, keyPair, data.access_token);
+                        }
                     }
-                    
+
                     window.location.href = '/dashboard?token=' + data.access_token;
-                
                 } else {
                     errorDiv.style.display = 'block';
-                    errorDiv.textContent = data.error || 'Login failed';
+                    errorDiv.textContent = data.error || 'Authentication failed. Please check your credentials.';
+                    btn.classList.remove('loading');
+                    btn.textContent = 'Sign in to secure network';
                 }
             } catch (error) {
-                console.error('Login error:', error);
                 errorDiv.style.display = 'block';
-                errorDiv.textContent = 'Connection error: ' + error.message + ' - Make sure you accept the self-signed certificate';
+                errorDiv.textContent = 'Connection error: ' + error.message + ' — Ensure you have accepted the self-signed certificate.';
+                btn.classList.remove('loading');
+                btn.textContent = 'Sign in to secure network';
             }
         });
     </script>
