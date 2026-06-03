@@ -1,52 +1,31 @@
+# save as fix_gateway_db.py
 import sqlite3
-import hashlib
 import os
 
-DB_PATH = 'database/gateway.db'
-os.makedirs('database', exist_ok=True)
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+DB_PATH = os.path.join(BASE_DIR, 'database', 'gateway.db')
 
 conn = sqlite3.connect(DB_PATH)
 c = conn.cursor()
 
-# Create tables
-c.execute('''CREATE TABLE IF NOT EXISTS users
-             (id INTEGER PRIMARY KEY AUTOINCREMENT,
-              username TEXT UNIQUE NOT NULL,
-              password_hash TEXT NOT NULL,
-              full_name TEXT NOT NULL,
-              department TEXT NOT NULL,
-              clearance_level TEXT NOT NULL,
-              is_active BOOLEAN DEFAULT 1,
-              created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)''')
+# Check if last_activity column exists in user_sessions
+c.execute("PRAGMA table_info(user_sessions)")
+columns = [col[1] for col in c.fetchall()]
 
-c.execute('''CREATE TABLE IF NOT EXISTS user_sessions
-             (id INTEGER PRIMARY KEY AUTOINCREMENT,
-              user_id INTEGER NOT NULL,
-              jwt_token TEXT NOT NULL,
-              refresh_token TEXT,
-              expires_at TIMESTAMP NOT NULL)''')
+if 'last_activity' not in columns:
+    print("Adding last_activity column to user_sessions...")
+    c.execute('ALTER TABLE user_sessions ADD COLUMN last_activity TIMESTAMP DEFAULT CURRENT_TIMESTAMP')
+    print("✓ Column added")
 
-c.execute('''CREATE TABLE IF NOT EXISTS token_blacklist
-             (id INTEGER PRIMARY KEY AUTOINCREMENT,
-              token TEXT NOT NULL)''')
+# Also add blacklisted_at if missing in token_blacklist
+c.execute("PRAGMA table_info(token_blacklist)")
+columns = [col[1] for col in c.fetchall()]
 
-# Clear existing
-c.execute('DELETE FROM users')
-
-# Create users
-users = [
-    ('intelligence_officer', 'password123', 'Kazi Rafiq', 'Intelligence', 'TOP_SECRET'),
-    ('defense_staff', 'password123', 'General AKM Shafi', 'Defense', 'SECRET'),
-    ('foreign_affairs', 'password123', 'Ambassador Farida Begum', 'Foreign', 'CONFIDENTIAL'),
-    ('general_user', 'password123', 'Mohammad Ali', 'General', 'BASIC'),
-]
-
-for username, password, full_name, department, clearance in users:
-    password_hash = hashlib.sha256(password.encode()).hexdigest()
-    c.execute('''INSERT INTO users (username, password_hash, full_name, department, clearance_level)
-                 VALUES (?, ?, ?, ?, ?)''', (username, password_hash, full_name, department, clearance))
-    print(f"✓ Created user: {username} ({clearance})")
+if 'blacklisted_at' not in columns:
+    print("Adding blacklisted_at column to token_blacklist...")
+    c.execute('ALTER TABLE token_blacklist ADD COLUMN blacklisted_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP')
+    print("✓ Column added")
 
 conn.commit()
 conn.close()
-print("\nGateway database initialized with users!")
+print("\n✅ Database fixed!")

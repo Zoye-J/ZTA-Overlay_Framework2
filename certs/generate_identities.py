@@ -1,48 +1,64 @@
 #!/usr/bin/env python
-"""Generate all certificates for the overlay network using pyOpenSSL"""
+"""Generate all certificates for the overlay network using cryptography library"""
 import os
 import sys
-from OpenSSL import crypto
+from cryptography import x509
+from cryptography.x509.oid import NameOID
+from cryptography.hazmat.primitives import hashes, serialization
+from cryptography.hazmat.primitives.asymmetric import rsa
 import datetime
 
 def generate_ca():
     """Generate Certificate Authority"""
     print("Generating Certificate Authority...")
     
-    # Generate key pair
-    ca_key = crypto.PKey()
-    ca_key.generate_key(crypto.TYPE_RSA, 2048)
+    # Generate private key
+    ca_key = rsa.generate_private_key(
+        public_exponent=65537,
+        key_size=4096,
+    )
     
-    # Create certificate
-    ca_cert = crypto.X509()
-    ca_cert.set_version(2)
-    ca_cert.set_serial_number(1)
-    
-    subject = ca_cert.get_subject()
-    subject.C = "BD"
-    subject.ST = "Dhaka"
-    subject.L = "Dhaka"
-    subject.O = "Bangladesh ZTA"
-    subject.CN = "ZTA Overlay CA"
-    
-    ca_cert.set_issuer(subject)
-    ca_cert.set_pubkey(ca_key)
-    ca_cert.gmtime_adj_notBefore(0)
-    ca_cert.gmtime_adj_notAfter(3650 * 24 * 3600)  # 10 years
-    ca_cert.add_extensions([
-        crypto.X509Extension(b"basicConstraints", True, b"CA:TRUE"),
-        crypto.X509Extension(b"keyUsage", True, b"keyCertSign, cRLSign"),
+    # Create certificate subject
+    subject = issuer = x509.Name([
+        x509.NameAttribute(NameOID.COUNTRY_NAME, "BD"),
+        x509.NameAttribute(NameOID.STATE_OR_PROVINCE_NAME, "Dhaka"),
+        x509.NameAttribute(NameOID.LOCALITY_NAME, "Dhaka"),
+        x509.NameAttribute(NameOID.ORGANIZATION_NAME, "Bangladesh ZTA"),
+        x509.NameAttribute(NameOID.COMMON_NAME, "ZTA Overlay CA"),
     ])
     
-    ca_cert.sign(ca_key, "sha256")
+    # Build certificate
+    cert = x509.CertificateBuilder()
+    cert = cert.subject_name(subject)
+    cert = cert.issuer_name(issuer)
+    cert = cert.public_key(ca_key.public_key())
+    cert = cert.serial_number(x509.random_serial_number())
+    cert = cert.not_valid_before(datetime.datetime.utcnow())
+    cert = cert.not_valid_after(datetime.datetime.utcnow() + datetime.timedelta(days=3650))
+    cert = cert.add_extension(
+        x509.BasicConstraints(ca=True, path_length=None), critical=True
+    )
+    cert = cert.add_extension(
+        x509.KeyUsage(digital_signature=False, content_commitment=False,
+                      key_encipherment=False, data_encipherment=False,
+                      key_agreement=False, key_cert_sign=True, crl_sign=True,
+                      encipher_only=False, decipher_only=False), critical=True
+    )
+    
+    # Sign certificate
+    ca_cert = cert.sign(ca_key, hashes.SHA256())
     
     # Save CA key
     with open("ca.key", "wb") as f:
-        f.write(crypto.dump_privatekey(crypto.FILETYPE_PEM, ca_key))
+        f.write(ca_key.private_bytes(
+            encoding=serialization.Encoding.PEM,
+            format=serialization.PrivateFormat.PKCS8,
+            encryption_algorithm=serialization.NoEncryption()
+        ))
     
     # Save CA cert
     with open("ca.crt", "wb") as f:
-        f.write(crypto.dump_certificate(crypto.FILETYPE_PEM, ca_cert))
+        f.write(ca_cert.public_bytes(serialization.Encoding.PEM))
     
     print("CA generated successfully")
     return ca_key, ca_cert
@@ -51,53 +67,67 @@ def generate_identity_cert(ca_key, ca_cert, identity_name):
     """Generate certificate for a specific identity"""
     print(f"Generating certificate for {identity_name}...")
     
-    # Generate key pair
-    key = crypto.PKey()
-    key.generate_key(crypto.TYPE_RSA, 2048)
-    
-    # Create certificate
-    cert = crypto.X509()
-    cert.set_version(2)
-    cert.set_serial_number(int(datetime.datetime.now().timestamp()))
-    
-    subject = cert.get_subject()
-    subject.C = "BD"
-    subject.O = "Bangladesh ZTA"
-    subject.CN = identity_name
-    
-    cert.set_issuer(ca_cert.get_subject())
-    cert.set_pubkey(key)
-    cert.gmtime_adj_notBefore(0)
-    cert.gmtime_adj_notAfter(365 * 24 * 3600)  # 1 year
-    
-    # Add SAN extension for localhost
-    san = crypto.X509Extension(
-        b"subjectAltName",
-        False,
-        b"DNS:localhost,DNS:127.0.0.1,DNS:" + identity_name.encode()
+    # Generate private key
+    key = rsa.generate_private_key(
+        public_exponent=65537,
+        key_size=2048,
     )
-    cert.add_extensions([san])
     
-    # Add key usage
-    key_usage = crypto.X509Extension(
-        b"keyUsage",
-        True,
-        b"digitalSignature, keyEncipherment"
+    # Create certificate subject
+    subject = x509.Name([
+        x509.NameAttribute(NameOID.COUNTRY_NAME, "BD"),
+        x509.NameAttribute(NameOID.ORGANIZATION_NAME, "Bangladesh ZTA"),
+        x509.NameAttribute(NameOID.COMMON_NAME, identity_name),
+    ])
+    
+    # Add Subject Alternative Names (SAN) for localhost
+    san_extensions = x509.SubjectAlternativeName([
+        x509.DNSName("localhost"),
+        x509.DNSName("127.0.0.1"),
+        x509.DNSName(identity_name),
+    ])
+    
+    # Build certificate
+    cert_builder = x509.CertificateBuilder()
+    cert_builder = cert_builder.subject_name(subject)
+    cert_builder = cert_builder.issuer_name(ca_cert.subject)
+    cert_builder = cert_builder.public_key(key.public_key())
+    cert_builder = cert_builder.serial_number(x509.random_serial_number())
+    cert_builder = cert_builder.not_valid_before(datetime.datetime.utcnow())
+    cert_builder = cert_builder.not_valid_after(datetime.datetime.utcnow() + datetime.timedelta(days=365))
+    cert_builder = cert_builder.add_extension(
+        x509.BasicConstraints(ca=False, path_length=None), critical=True
     )
-    cert.add_extensions([key_usage])
+    cert_builder = cert_builder.add_extension(san_extensions, critical=False)
+    cert_builder = cert_builder.add_extension(
+        x509.KeyUsage(digital_signature=True, content_commitment=False,
+                      key_encipherment=True, data_encipherment=False,
+                      key_agreement=False, key_cert_sign=False, crl_sign=False,
+                      encipher_only=False, decipher_only=False), critical=True
+    )
+    cert_builder = cert_builder.add_extension(
+        x509.ExtendedKeyUsage([x509.ExtendedKeyUsageOID.CLIENT_AUTH,
+                               x509.ExtendedKeyUsageOID.SERVER_AUTH]),
+        critical=False
+    )
     
-    cert.sign(ca_key, "sha256")
+    # Sign certificate
+    cert = cert_builder.sign(ca_key, hashes.SHA256())
     
     # Create directory
     os.makedirs(f"identities/{identity_name}", exist_ok=True)
     
     # Save private key
     with open(f"identities/{identity_name}/{identity_name}.key", "wb") as f:
-        f.write(crypto.dump_privatekey(crypto.FILETYPE_PEM, key))
+        f.write(key.private_bytes(
+            encoding=serialization.Encoding.PEM,
+            format=serialization.PrivateFormat.PKCS8,
+            encryption_algorithm=serialization.NoEncryption()
+        ))
     
     # Save certificate
     with open(f"identities/{identity_name}/{identity_name}.crt", "wb") as f:
-        f.write(crypto.dump_certificate(crypto.FILETYPE_PEM, cert))
+        f.write(cert.public_bytes(serialization.Encoding.PEM))
     
     print(f"  ✓ Saved to certs/identities/{identity_name}/")
     return cert
@@ -109,6 +139,9 @@ def main():
     # Change to certs directory
     script_dir = os.path.dirname(os.path.abspath(__file__))
     os.chdir(script_dir)
+    
+    # Create identities directory
+    os.makedirs("identities", exist_ok=True)
     
     # Generate CA
     ca_key, ca_cert = generate_ca()

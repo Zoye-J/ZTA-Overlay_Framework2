@@ -14,7 +14,6 @@ from cryptography.hazmat.primitives.asymmetric import rsa, padding
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 import base64
-import os
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, BASE_DIR)
@@ -32,63 +31,11 @@ with open(CLEARANCE_PATH, 'r') as f:
 CLEARANCE_HIERARCHY = {c['name']: c['level'] for c in CLEARANCE_LEVELS['clearance_hierarchy']}
 
 app = Flask(__name__)
-# Use the same SECRET_KEY as gateway - load from env
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', secrets.token_hex(32))
 
 # Database
 DB_PATH = os.path.join(BASE_DIR, 'database', 'api.db')
 os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
-
-
-class DocumentEncryption:
-    """Handle document encryption/decryption for Framework 2"""
-    
-    @staticmethod
-    def generate_document_key():
-        """Generate a random AES key for document encryption"""
-        return os.urandom(32)  # 256-bit AES key
-    
-    @staticmethod
-    def encrypt_document(content, document_key):
-        """Encrypt document content with AES-GCM"""
-        iv = os.urandom(12)
-        cipher = Cipher(algorithms.AES(document_key), modes.GCM(iv))
-        encryptor = cipher.encryptor()
-        ciphertext = encryptor.update(content.encode()) + encryptor.finalize()
-        
-        return {
-            'ciphertext': base64.b64encode(ciphertext).decode(),
-            'iv': base64.b64encode(iv).decode(),
-            'tag': base64.b64encode(encryptor.tag).decode()
-        }
-    
-    @staticmethod
-    def decrypt_document(encrypted_data, document_key):
-        """Decrypt document content"""
-        ciphertext = base64.b64decode(encrypted_data['ciphertext'])
-        iv = base64.b64decode(encrypted_data['iv'])
-        tag = base64.b64decode(encrypted_data['tag'])
-        
-        cipher = Cipher(algorithms.AES(document_key), modes.GCM(iv, tag))
-        decryptor = cipher.decryptor()
-        decrypted = decryptor.update(ciphertext) + decryptor.finalize()
-        
-        return decrypted.decode()
-    
-    @staticmethod
-    def encrypt_document_key_for_user(document_key, user_public_key_pem):
-        """Encrypt document key with user's RSA public key"""
-        user_public_key = serialization.load_pem_public_key(user_public_key_pem.encode())
-        
-        encrypted_key = user_public_key.encrypt(
-            document_key,
-            padding.OAEP(
-                mgf=padding.MGF1(algorithm=hashes.SHA256()),
-                algorithm=hashes.SHA256(),
-                label=None
-            )
-        )
-        return base64.b64encode(encrypted_key).decode()
 
 def init_db():
     conn = sqlite3.connect(DB_PATH)
@@ -114,27 +61,34 @@ def init_db():
 init_db()
 
 def verify_token(token):
-    """Verify JWT token"""
+    """Verify JWT token - Accept user JWTs"""
     if not token:
         return None
     try:
-        # Remove 'Bearer ' prefix if present
         if token.startswith('Bearer '):
             token = token[7:]
         
-        # Decode token
+        # Decode and verify user JWT
         payload = jwt.decode(
             token, 
             app.config['SECRET_KEY'], 
             algorithms=['HS256'],
             options={'verify_exp': True}
         )
+        
+        # Only accept access tokens
+        if payload.get('type') != 'access':
+            print(f"[API Server] Invalid token type: {payload.get('type')}")
+            return None
+        
+        print(f"[API Server] JWT verified for: {payload.get('username')}")
         return payload
+        
     except jwt.ExpiredSignatureError:
         print("[API Server] Token expired")
         return None
     except jwt.InvalidTokenError as e:
-        print(f"[API Server] Invalid token: {e}")
+        print(f"[API Server] Invalid JWT: {e}")
         return None
 
 def token_required(f):
@@ -176,7 +130,7 @@ def verify_token_endpoint():
 @app.route('/api/v1/documents', methods=['GET'])
 @token_required
 def get_documents():
-    """Get documents accessible to user - Department-based access control"""
+    """Get documents accessible to user"""
     user = request.user
     user_clearance = user.get('clearance_level', 'BASIC')
     user_dept = user.get('department', 'General')
@@ -185,25 +139,20 @@ def get_documents():
     
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
-    
-    c.execute('''SELECT id, title, classification, department, created_at 
-                 FROM documents''')
+    c.execute('SELECT id, title, classification, department, created_at FROM documents')
     all_docs = c.fetchall()
     conn.close()
     
-    # Filter based on clearance AND department
     docs = []
     for doc in all_docs:
         doc_id, title, doc_clearance, doc_dept, created_at = doc
         
-        # Check if user has sufficient clearance
+        # Check clearance
         if CLEARANCE_HIERARCHY.get(user_clearance, 0) < CLEARANCE_HIERARCHY.get(doc_clearance, 0):
-            print(f"  [DENIED] {title}: Insufficient clearance (need {doc_clearance}, have {user_clearance})")
             continue
-    
         
-        if doc_dept == 'General':
-            # General documents: visible to everyone
+        # Department access: General visible to all, others only same department
+        if doc_dept == 'General' or doc_dept == user_dept:
             docs.append({
                 'id': doc_id,
                 'title': title,
@@ -211,56 +160,38 @@ def get_documents():
                 'department': doc_dept,
                 'created_at': created_at
             })
-            print(f"  [ALLOWED] {title}: General document - visible to all departments")
-        elif doc_dept == user_dept:
-            # Same department: visible
-            docs.append({
-                'id': doc_id,
-                'title': title,
-                'classification': doc_clearance,
-                'department': doc_dept,
-                'created_at': created_at
-            })
-            print(f"  [ALLOWED] {title}: Same department ({doc_dept})")
-        else:
-            # Different department: NOT visible
-            print(f"  [DENIED] {title}: Different department (doc: {doc_dept}, user: {user_dept})")
-            continue
     
-    print(f"[API Server] Returning {len(docs)} documents for {user_dept} department user")
+    print(f"[API Server] Returning {len(docs)} documents")
     return jsonify({'documents': docs})
 
 @app.route('/api/v1/documents/<int:doc_id>', methods=['GET'])
 @token_required
 def get_document(doc_id):
-    """Get specific document - Department-based access control"""
+    """Get specific document"""
     user = request.user
     user_clearance = user.get('clearance_level', 'BASIC')
     user_dept = user.get('department', 'General')
     
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
-    c.execute('''SELECT id, title, content, classification, department, created_at, encrypted_key 
-                 FROM documents WHERE id = ?''', (doc_id,))
+    c.execute('SELECT id, title, content, classification, department, created_at FROM documents WHERE id = ?', (doc_id,))
     doc = c.fetchone()
     conn.close()
     
     if not doc:
         return jsonify({'error': 'Document not found'}), 404
     
-    doc_id, title, content, doc_clearance, doc_dept, created_at, encrypted_key = doc
+    doc_id, title, content, doc_clearance, doc_dept, created_at = doc
     
     # Check clearance
     if CLEARANCE_HIERARCHY.get(user_clearance, 0) < CLEARANCE_HIERARCHY.get(doc_clearance, 0):
-        return jsonify({'error': f'Insufficient clearance. Required: {doc_clearance}'}), 403
+        return jsonify({'error': f'Insufficient clearance'}), 403
     
-    # Department access rules:
-    # 1. General department documents: visible to ALL departments
-    # 2. Other departments: ONLY visible to users from that department
+    # Department access
     if doc_dept != 'General' and doc_dept != user_dept:
-        return jsonify({'error': f'Access denied. This document is restricted to {doc_dept} department only.'}), 403
+        return jsonify({'error': f'Access denied. Restricted to {doc_dept} department.'}), 403
     
-    # For TOP_SECRET, additional business hours check
+    # TOP_SECRET business hours check
     if doc_clearance == 'TOP_SECRET':
         current_hour = datetime.now().hour
         business_start = int(os.environ.get('BUSINESS_HOURS_START', 8))
@@ -276,7 +207,6 @@ def get_document(doc_id):
     conn.commit()
     conn.close()
     
-    # Return encrypted document
     return jsonify({
         'id': doc_id,
         'title': title,
@@ -284,73 +214,24 @@ def get_document(doc_id):
         'classification': doc_clearance,
         'department': doc_dept,
         'created_at': created_at,
-        'encrypted': True,
-        'encrypted_key': encrypted_key
+        'encrypted': False
     })
-
-@app.route('/api/v1/documents', methods=['POST'])
-@token_required
-def create_document():
-    """Create a new document with end-to-end encryption"""
-    user = request.user
-    data = request.json
-    
-    # Check clearance
-    required_clearance = data.get('classification', 'BASIC')
-    user_clearance = user.get('clearance_level', 'BASIC')
-    
-    if CLEARANCE_HIERARCHY.get(user_clearance, 0) < CLEARANCE_HIERARCHY.get(required_clearance, 0):
-        return jsonify({'error': f'Insufficient clearance'}), 403
-    
-    # Generate document encryption key
-    doc_key = DocumentEncryption.generate_document_key()
-    
-    # Encrypt document content
-    encrypted = DocumentEncryption.encrypt_document(data.get('content', ''), doc_key)
-    
-    # Encrypt document key with user's public key (store for this user)
-    # In production, encrypt for multiple authorized users
-    encrypted_key_for_user = DocumentEncryption.encrypt_document_key_for_user(
-        doc_key, 
-        data.get('user_public_key')  # Frontend should send user's public key
-    )
-    
-    conn = sqlite3.connect(DB_PATH)
-    c = conn.cursor()
-    c.execute('''INSERT INTO documents (title, content, classification, department, author_id, encrypted_key, encryption_iv, encryption_tag)
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?)''',
-              (data.get('title'), 
-               json.dumps(encrypted),  # Store encrypted content as JSON
-               required_clearance,
-               user.get('department'), 
-               user.get('user_id'),
-               encrypted_key_for_user,
-               encrypted['iv'],
-               encrypted['tag']))
-    conn.commit()
-    doc_id = c.lastrowid
-    conn.close()
-    
-    return jsonify({'status': 'success', 'message': 'Document created encrypted', 'document_id': doc_id})
 
 @app.route('/health', methods=['GET'])
 def health():
-    """Health check"""
     return jsonify({'status': 'healthy', 'service': 'api_server'})
 
 if __name__ == '__main__':
     host = SERVICE_CONFIG['service']['bind_host']
     port = SERVICE_CONFIG['service']['port']
     
-    # SSL context for HTTPS
-    ssl_context = None
     cert_path = os.path.join(BASE_DIR, 'certs', 'identities', 'api-server', 'api-server.crt')
     key_path = os.path.join(BASE_DIR, 'certs', 'identities', 'api-server', 'api-server.key')
     
     if os.path.exists(cert_path) and os.path.exists(key_path):
         ssl_context = (cert_path, key_path)
         print(f"API Server starting on https://{host}:{port}")
-        app.run(host=host, port=port, debug=True, use_reloader=False, ssl_context=ssl_context)
+        app.run(host=host, port=port, debug=False, use_reloader=False, ssl_context=ssl_context)
     else:
         print(f"API Server starting on http://{host}:{port}")
-        app.run(host=host, port=port, debug=True, use_reloader=False)
+        app.run(host=host, port=port, debug=False, use_reloader=False)

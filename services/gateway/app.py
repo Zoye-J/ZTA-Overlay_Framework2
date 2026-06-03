@@ -1,6 +1,7 @@
 #services/gateway/app.py
 """Zitified Gateway Service - Only binds to localhost, receives traffic via Edge Router"""
 import os
+import ssl
 import sys
 import yaml
 import jwt
@@ -11,6 +12,7 @@ from datetime import datetime, timedelta
 from functools import wraps
 from flask import Flask, request, jsonify, session, render_template
 from flask_cors import CORS
+#from services.service_auth import require_service_token, get_service_token
 
 # Add parent to path
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -191,6 +193,7 @@ def add_cors_headers(response):
     return response
 
 @app.route('/health', methods=['GET'])
+@token_required
 def gateway_health():
     """Health check for gateway service"""
     return jsonify({
@@ -446,31 +449,22 @@ def create_user():
         return jsonify({'error': 'Username already exists'}), 400
 
 if __name__ == '__main__':
-    # IMPORTANT: Bind ONLY to localhost - no public ports!
     host = SERVICE_CONFIG['service']['bind_host']
     port = SERVICE_CONFIG['service']['port']
     
-    # SSL context for HTTPS
-    ssl_context = None
     cert_path = os.path.join(BASE_DIR, 'certs', 'identities', 'gateway', 'gateway.crt')
     key_path = os.path.join(BASE_DIR, 'certs', 'identities', 'gateway', 'gateway.key')
     
     if os.path.exists(cert_path) and os.path.exists(key_path):
+        # Simple SSL context - NO client certificate required
         ssl_context = (cert_path, key_path)
+        
         print(f"=" * 60)
-        print(f"Gateway Service (Zitified) - HTTPS Enabled")
+        print(f"Gateway Service - HTTPS")
         print(f"=" * 60)
         print(f"  • Binding to: https://{host}:{port}")
-        print(f"  • Certificate: {cert_path}")
-        print(f"  • Traffic received via: Edge Router on port 9999")
-        print(f"  • JWT Algorithm: {app.config['JWT_ALGORITHM']}")
-        print(f"  • Token expiry: {app.config['JWT_EXPIRY_HOURS']} hours")
         print(f"=" * 60)
-        app.run(host=host, port=port, debug=True, use_reloader=False, ssl_context=ssl_context)
+        app.run(host=host, port=port, debug=False, use_reloader=False, ssl_context=ssl_context)
     else:
-        print(f"=" * 60)
-        print(f"Gateway Service (Zitified) - HTTP Mode (No SSL certs found)")
-        print(f"=" * 60)
-        print(f"  • Binding to: http://{host}:{port}")
-        print(f"=" * 60)
-        app.run(host=host, port=port, debug=True, use_reloader=False)
+        print(f"ERROR: Certificates not found at {cert_path}")
+        sys.exit(1)

@@ -4,15 +4,13 @@ import yaml
 from flask import Flask, jsonify, request
 from flask_sqlalchemy import SQLAlchemy
 from dotenv import load_dotenv
+import ssl
 
-# Add parent to path
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, BASE_DIR)
 
-# Load environment variables - NO HARDCODES
 load_dotenv()
 
-# Load configuration from YAML
 CONFIG_PATH = os.path.join(BASE_DIR, 'config', 'controller_config.yaml')
 with open(CONFIG_PATH, 'r') as f:
     CONFIG = yaml.safe_load(f)
@@ -22,11 +20,8 @@ with open(NETWORK_CONFIG_PATH, 'r') as f:
     NETWORK_CONFIG = yaml.safe_load(f)
 
 app = Flask(__name__)
-
-# Configure from environment and config files - NO HARDCODES
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'dev-secret-key-change-in-production')
 
-# Fix: Set database URI properly
 database_path = os.path.join(BASE_DIR, CONFIG['controller']['database']['path'])
 os.makedirs(os.path.dirname(database_path), exist_ok=True)
 app.config['SQLALCHEMY_DATABASE_URI'] = f"sqlite:///{database_path}"
@@ -34,11 +29,9 @@ app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
 db = SQLAlchemy(app)
 
-# Import models (must be after db initialization)
+# Models (same as before)
 class Identity(db.Model):
-    """Represents a service or client in the overlay network"""
     __tablename__ = 'identities'
-    
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(100), nullable=False)
     identity_type = db.Column(db.String(20), nullable=False)
@@ -48,9 +41,7 @@ class Identity(db.Model):
     last_seen = db.Column(db.DateTime)
 
 class ServicePolicy(db.Model):
-    """Policies defining who can access what services"""
     __tablename__ = 'service_policies'
-    
     id = db.Column(db.Integer, primary_key=True)
     identity_id = db.Column(db.Integer, db.ForeignKey('identities.id'))
     target_service = db.Column(db.String(100))
@@ -58,52 +49,30 @@ class ServicePolicy(db.Model):
     is_active = db.Column(db.Boolean, default=True)
     conditions = db.Column(db.JSON)
 
-class ActiveSession(db.Model):
-    """Tracks active connections in the overlay"""
-    __tablename__ = 'active_sessions'
-    
-    id = db.Column(db.Integer, primary_key=True)
-    identity_id = db.Column(db.Integer, db.ForeignKey('identities.id'))
-    session_token = db.Column(db.String(500))
-    connected_at = db.Column(db.DateTime, default=db.func.current_timestamp())
-    last_activity = db.Column(db.DateTime, default=db.func.current_timestamp())
-    client_ip = db.Column(db.String(50))
-
-# Create tables
 with app.app_context():
     db.create_all()
 
 @app.route('/api/v1/health', methods=['GET'])
 def health():
-    """Health check endpoint"""
     return jsonify({
         'status': 'healthy',
         'controller': CONFIG['controller']['name'],
         'environment': CONFIG['controller']['environment'],
-        'database': 'connected'
+        'protocol': 'https'
     })
 
 @app.route('/api/v1/enroll', methods=['POST'])
 def enroll_identity():
-    """Enroll a new service or client into the overlay network"""
     data = request.json
-    
     identity_type = data.get('type')
     name = data.get('name')
     enrollment_token = data.get('enrollment_token')
     
-    # Verify enrollment token
     master_secret = os.environ.get('MASTER_ENROLLMENT_SECRET', 'dev_token_123')
     if enrollment_token != master_secret:
         return jsonify({'error': 'Invalid enrollment token'}), 401
     
-    # Create new identity
-    identity = Identity(
-        name=name,
-        identity_type=identity_type,
-        status='active'
-    )
-    
+    identity = Identity(name=name, identity_type=identity_type, status='active')
     db.session.add(identity)
     db.session.commit()
     
@@ -116,28 +85,18 @@ def enroll_identity():
 
 @app.route('/api/v1/policies/check', methods=['POST'])
 def check_policy():
-    """Policy Decision Point - checks if source can access target"""
     data = request.json
     source_identity = data.get('source')
     target_service = data.get('target')
     action = data.get('action')
     
-    # Load policies from YAML
     policies_path = os.path.join(BASE_DIR, 'config', 'policies', 'access_policies.yaml')
     try:
         with open(policies_path, 'r') as f:
             policies = yaml.safe_load(f)
     except FileNotFoundError:
-        # Default policy - allow everything for development
-        return jsonify({
-            'allowed': True,
-            'source': source_identity,
-            'target': target_service,
-            'action': action,
-            'message': 'No policy file found, allowing by default'
-        })
+        return jsonify({'allowed': True, 'source': source_identity, 'target': target_service})
     
-    # Check policies
     allowed = False
     for policy in policies.get('policies', []):
         if (policy.get('action') == action and 
@@ -146,38 +105,31 @@ def check_policy():
             allowed = True
             break
     
-    return jsonify({
-        'allowed': allowed,
-        'source': source_identity,
-        'target': target_service,
-        'action': action
-    })
-
-@app.route('/api/v1/identities', methods=['GET'])
-def list_identities():
-    """List all enrolled identities"""
-    identities = Identity.query.all()
-    return jsonify({
-        'identities': [
-            {
-                'id': i.id,
-                'name': i.name,
-                'type': i.identity_type,
-                'status': i.status,
-                'created_at': i.created_at.isoformat() if i.created_at else None
-            } for i in identities
-        ]
-    })
+    return jsonify({'allowed': allowed, 'source': source_identity, 'target': target_service})
 
 if __name__ == '__main__':
     port = int(os.environ.get('CONTROLLER_PORT', CONFIG['controller']['control_plane']['bind_port']))
-    host = os.environ.get('CONTROLLER_HOST', CONFIG['controller']['control_plane']['bind_host'])
+    host = os.environ.get('CONTROLLER_HOST', 'localhost')
     
-    print("=" * 60)
-    print("ZTA Controller - Policy Decision Point")
-    print("=" * 60)
-    print(f"Running on: {host}:{port}")
-    print(f"Database: {app.config['SQLALCHEMY_DATABASE_URI']}")
-    print("=" * 60)
+    cert_path = os.path.join(BASE_DIR, 'certs', 'identities', 'controller', 'controller.crt')
+    key_path = os.path.join(BASE_DIR, 'certs', 'identities', 'controller', 'controller.key')
     
-    app.run(host=host, port=port, debug=True, use_reloader=False)
+    if os.path.exists(cert_path) and os.path.exists(key_path):
+        # Create PROPER SSL context
+        ssl_context = ssl.create_default_context(ssl.Purpose.CLIENT_AUTH)
+        ssl_context.load_cert_chain(cert_path, key_path)
+        ssl_context.minimum_version = ssl.TLSVersion.TLSv1_2
+        ssl_context.maximum_version = ssl.TLSVersion.TLSv1_3
+        
+        print("=" * 60)
+        print("ZTA Controller - HTTPS with PROPER SSL")
+        print("=" * 60)
+        print(f"Running on: https://{host}:{port}")
+        print(f"TLS version: TLS 1.2+ only")
+        print("=" * 60)
+        
+        app.run(host=host, port=port, debug=False, use_reloader=False, ssl_context=ssl_context)
+    else:
+        print(f"ERROR: Certificates not found at {cert_path}")
+        print("Please run: python certs/generate_identities.py")
+        sys.exit(1)
